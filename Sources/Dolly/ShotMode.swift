@@ -1,5 +1,6 @@
 import AppKit
 import DollyCore
+import DollyRender
 import DollyUI
 import Foundation
 import ImageIO
@@ -76,10 +77,30 @@ enum ShotMode {
     }
 }
 
-/// The workspace each scenario shows. Stage, inspector and timeline are added in their tasks.
+/// The workspace each scenario shows: the stage from the Shelf footage through Dolly's own frame
+/// composer; inspector and timeline are added in their tasks.
 @MainActor
 enum ShotWorkspace {
     static func view(editor: EditorModel, scenario: String, inputs: ShotScenarios.Inputs, scheme: ColorScheme) -> some View {
-        EditorWorkspace(editor: editor, stage: AnyView(Color.clear), inspector: AnyView(Color.clear), timeline: AnyView(Color.clear))
+        if scenario == "stage-play" { editor.select(nil) }
+        let clicks = editor.pointer?.clicks ?? []
+        return EditorWorkspace(editor: editor,
+                               stage: AnyView(StageView(editor: editor, image: still(editor, inputs), player: nil, isPlaying: false, clicks: clicks)),
+                               inspector: AnyView(Color.clear), timeline: AnyView(Color.clear))
+    }
+
+    /// Aim mode shows the recording at 1x; play mode the output at the playhead with its pointer.
+    static func still(_ editor: EditorModel, _ inputs: ShotScenarios.Inputs) -> CGImage? {
+        guard let footage = inputs.footage else { return nil }
+        let take = editor.take
+        if editor.selection != nil { return StillRenderer.render(take: take, recording: footage, camera: nil, pointer: nil, ring: nil) }
+        let layout = ShapeLayout(shape: .wide16x9, recordingSize: take.size, padding: take.look.padding)
+        let pointer = editor.pointer
+        let path = CameraPath(zooms: take.zooms, layout: layout, pointer: pointer.map { p in { @Sendable t in p.position(at: t) } },
+                              duration: take.duration)
+        let t = editor.playhead
+        return StillRenderer.render(take: take, recording: footage, camera: path.camera(at: t),
+                                    pointer: pointer?.position(at: t).map { ($0, pointer?.shape(at: t) ?? .arrow) },
+                                    ring: pointer?.ring(at: t).map { ($0.center, $0.progress) })
     }
 }

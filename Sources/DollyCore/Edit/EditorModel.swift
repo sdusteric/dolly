@@ -18,6 +18,8 @@ public final class EditorModel {
     public var playhead: Double = 0
     public let pointer: PointerPath?
     @ObservationIgnored private var history = UndoStack()
+    /// While a drag runs, edits apply live and become one undo step when it ends.
+    @ObservationIgnored private var gestureStart: Take?
 
     public init(take: Take, pointer: PointerPath?) {
         self.take = take
@@ -139,6 +141,13 @@ public final class EditorModel {
 
     public func setLook(_ l: Look) { change { $0.look = l } }
 
+    public func beginGesture() { gestureStart = take }
+
+    public func endGesture() {
+        if let start = gestureStart, start != take { history.record(start) }
+        gestureStart = nil
+    }
+
     public func undo() {
         if let previous = history.undo(take) { take = previous }
     }
@@ -161,7 +170,7 @@ public final class EditorModel {
         var next = take
         body(&next)
         guard next != take else { return }
-        history.record(take)
+        if gestureStart == nil { history.record(take) }
         take = next
     }
 

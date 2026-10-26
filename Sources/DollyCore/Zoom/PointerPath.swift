@@ -15,7 +15,7 @@ public struct PointerPath: Sendable {
     private let raw: [CGPoint?]
     private let drawn: [CGPoint?]
     private let shapes: [PointerShape]
-    private let clicks: [Click]
+    public let clicks: [Click]
 
     public init(samples: [PointerSample], geometry: RecordingGeometry, clicks: [Click], recordingStartHost: Double, look: Look) {
         self.clicks = clicks

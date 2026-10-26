@@ -104,3 +104,27 @@ import Testing
         #expect(model.zoom(ids[0])!.moveIn == 1.5 && model.zoom(ids[0])!.moveOut == 0.2)
     }
 }
+
+@Suite struct EditorGestureTests {
+    @Test func aDragIsOneUndoStep() throws {
+        var take = SyntheticTake.shelfDemo()
+        take.zooms = [Zoom(start: 1, end: 5, aim: CGPoint(x: 100, y: 100), depth: 2, mode: .hold, moveIn: 0.6, moveOut: 0.5,
+                           source: .auto, clickIDs: [], name: "")]
+        let m = EditorModel(take: take, pointer: nil)
+        let id = take.zooms[0].id
+        m.beginGesture()
+        for x in stride(from: 110.0, through: 200, by: 10) { m.aim(id, at: CGPoint(x: x, y: 100)) }
+        m.endGesture()
+        #expect(m.zoom(id)?.aim == CGPoint(x: 200, y: 100))
+        m.undo()
+        #expect(m.zoom(id)?.aim == CGPoint(x: 100, y: 100))
+        #expect(!m.canUndo)
+    }
+
+    @Test func aGestureThatChangesNothingRecordsNothing() {
+        let m = EditorModel(take: SyntheticTake.shelfDemo(), pointer: nil)
+        m.beginGesture()
+        m.endGesture()
+        #expect(!m.canUndo)
+    }
+}
