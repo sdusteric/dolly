@@ -18,6 +18,13 @@ public struct Settings: Codable, Hashable, Sendable {
     }
 
     public var hotkey: HotkeyCombo = .defaultRecord
+    /// "Use for new takes" in the inspector (spec 6.4).
+    public var defaultLook = Look()
+    /// nil keeps exports in ~/Movies/Dolly (or DOLLY_HOME).
+    public var exportsFolder: String?
+    public var exportFPS = 60
+    /// Writes the Shelf poster (status/dolly/poster.jpg); off by default (app-updates CONTRACT.md).
+    public var showInShelf = false
     public var advanced = Advanced()
 
     public init() {}
@@ -25,6 +32,10 @@ public struct Settings: Codable, Hashable, Sendable {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         hotkey = try c.decodeIfPresent(HotkeyCombo.self, forKey: .hotkey) ?? .defaultRecord
+        defaultLook = try c.decodeIfPresent(Look.self, forKey: .defaultLook) ?? Look()
+        exportsFolder = try c.decodeIfPresent(String.self, forKey: .exportsFolder)
+        exportFPS = try c.decodeIfPresent(Int.self, forKey: .exportFPS) ?? 60
+        showInShelf = try c.decodeIfPresent(Bool.self, forKey: .showInShelf) ?? false
         advanced = try c.decodeIfPresent(Advanced.self, forKey: .advanced) ?? Advanced()
     }
 }

@@ -22,7 +22,8 @@ public struct EditorWorkspace: View {
                 stage.frame(maxWidth: .infinity, maxHeight: .infinity)
                 inspector
                     .frame(width: Theme.Size.inspector)
-                    .frame(maxHeight: .infinity)
+                    .frame(minHeight: 0, maxHeight: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Size.inspectorRadius))
                     .background(RoundedRectangle(cornerRadius: Theme.Size.inspectorRadius).fill(Theme.raised.color))
             }
             timeline.frame(height: Theme.Size.timeline)

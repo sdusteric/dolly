@@ -59,6 +59,7 @@ enum ShotMode {
         }
         .frame(width: options.size.width, height: options.size.height)
         .environment(\.colorScheme, options.scheme)
+        .environment(\.dollyShot, true)
         let renderer = ImageRenderer(content: view)
         renderer.scale = 2
         var image: CGImage?
@@ -86,7 +87,7 @@ enum ShotWorkspace {
         let clicks = editor.pointer?.clicks ?? []
         return EditorWorkspace(editor: editor,
                                stage: AnyView(StageView(editor: editor, image: still(editor, inputs), player: nil, isPlaying: false, clicks: clicks)),
-                               inspector: AnyView(Color.clear),
+                               inspector: AnyView(InspectorView(editor: editor, clicks: clicks, useForNewTakes: { _ in })),
                                timeline: AnyView(TimelineView(editor: editor, clickTimes: clicks.map(\.t),
                                                               filmstrip: inputs.footage.map { Image(decorative: $0, scale: 1) },
                                                               playback: nil, isPlaying: false)))

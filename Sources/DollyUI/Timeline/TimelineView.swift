@@ -174,7 +174,7 @@ public struct TimelineView: View {
                 .padding(.leading, 6)
                 .frame(height: geometry.frame.height)
             if selected {
-                Rectangle().strokeBorder(Theme.ink.color, lineWidth: 2).padding(-4)
+                Rectangle().strokeBorder(Theme.ink.color, lineWidth: 2)
                     .frame(width: geometry.frame.width + 8, height: geometry.frame.height + 8)
                     .offset(x: -4, y: -4)
             }
