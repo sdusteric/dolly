@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dolly A: Spike marks</title>
+<style>
+/* Direction A, Spike marks. Zooms are strips of spike tape on the track and L-shaped
+   spike corners on the stage, the way a stage floor marks where the camera lands.
+   Window 1440 x 900. Frame: 52 toolbar + 228 sidebar; sheet inset 8 right and bottom. */
+:root {
+  --frame: #EFEEEB; --sheet: #FFFFFF; --raised: #F5F4F1; --active: #E4E2DE;
+  --border: #E6E4E0; --rule: #EFEEEA; --control: #CFCCC6;
+  --text: #151413; --muted: #5E5B57;
+  --tape: #FF4F9A; --on-tape: #1A0710; --primary: #151413; --on-primary: #FFFFFF;
+  --stage: #3E4A4F; --scrim: rgba(20,19,18,.42); --rec: #D93A2B;
+  --display: "Avenir Next", "Avenir", system-ui, sans-serif;
+  --font: -apple-system, "SF Pro Text", system-ui, sans-serif;
+  --dur: 48.2;
+}
+:root[data-theme="dark"] {
+  --frame: #0E0E0D; --sheet: #171716; --raised: #222120; --active: #2C2B29;
+  --border: #2A2928; --rule: #222120; --control: #45433F;
+  --text: #F4F2EE; --muted: #B0ADA7;
+  --tape: #FF5FA4; --primary: #F4F2EE; --on-primary: #151413;
+  --stage: #2A3236; --scrim: rgba(0,0,0,.5); --rec: #FF6B5C;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 1440px; height: 900px; overflow: hidden; }
+body { background: var(--frame); color: var(--text); font: 13px/18px var(--font); -webkit-font-smoothing: antialiased; }
+.num { font-variant-numeric: tabular-nums; }
+/* toolbar */
+.toolbar { position: absolute; left: 0; top: 0; right: 0; height: 52px; display: flex; align-items: center; padding: 0 16px 0 20px; }
+.lights { display: flex; gap: 8px; width: 208px; }
+.lights i { width: 12px; height: 12px; border-radius: 50%; background: #FF5F57; }
+.lights i:nth-child(2) { background: #FEBC2E; } .lights i:nth-child(3) { background: #28C840; }
+.doc { display: flex; align-items: baseline; gap: 10px; }
+.doc b { font: 600 15px/20px var(--display); letter-spacing: -.01em; }
+.doc span { color: var(--muted); }
+.tools { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.btn { height: 28px; padding: 0 12px; border-radius: 6px; border: 1px solid var(--control); background: var(--sheet); color: var(--text); font: 500 13px/26px var(--font); display: inline-flex; gap: 6px; align-items: center; }
+.btn.primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--rec); }
+.kbd { color: var(--muted); font-size: 12px; }
+.btn.primary .kbd { color: inherit; opacity: .7; }
+/* sidebar */
+.side { position: absolute; left: 0; top: 52px; width: 228px; bottom: 0; padding: 4px 10px; }
+.side h2 { font: 600 12px/16px var(--font); color: var(--muted); padding: 8px 8px 8px; }
+.take { display: grid; grid-template-columns: 56px 1fr; gap: 10px; padding: 8px; border-radius: 8px; align-items: center; }
+.take.on { background: var(--active); }
+.thumb { width: 56px; height: 40px; border-radius: 4px; background: var(--stage) center/cover no-repeat; }
+.take b { display: block; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.take span { color: var(--muted); font-size: 12px; }
+.side .foot { position: absolute; left: 18px; right: 18px; bottom: 18px; color: var(--muted); font-size: 12px; line-height: 16px; }
+/* sheet */
+.sheet { position: absolute; left: 228px; top: 52px; right: 8px; bottom: 8px; background: var(--sheet); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+.work { position: absolute; left: 16px; top: 16px; right: 320px; height: 548px; }
+.shapes { display: flex; align-items: center; gap: 12px; height: 32px; }
+.seg { display: inline-flex; background: var(--raised); border-radius: 7px; padding: 2px; }
+.seg span { padding: 0 12px; height: 26px; line-height: 26px; border-radius: 5px; color: var(--muted); font-weight: 500; }
+.seg span.on { background: var(--sheet); color: var(--text); box-shadow: 0 0 0 1px var(--border); }
+.shapes .note { color: var(--muted); margin-left: auto; }
+/* stage: 16:9, 868 x 488. Footage box 403 x 408 centered, top 40. */
+.stage { position: relative; margin-top: 12px; width: 868px; height: 488px; background: var(--stage); border-radius: 8px; overflow: hidden; }
+.foot-img { position: absolute; left: 232px; top: 40px; width: 403px; height: 408px; border-radius: 12px; background: center/cover no-repeat; box-shadow: 0 18px 40px rgba(0,0,0,.28); }
+/* Zoom 2 at 2.0x on Run check up (75%, 37% of the footage): frame 434 x 244 around (535, 191), clamped to the footage edge. */
+.scrim { display: none; }
+.spike { position: absolute; left: 201px; top: 69px; width: 434px; height: 244px; box-shadow: 0 0 0 1200px var(--scrim); }
+.spike i { position: absolute; width: 26px; height: 26px; border: 0 solid var(--tape); }
+.spike i:nth-child(1) { left: -3px; top: -3px; border-width: 5px 0 0 5px; }
+.spike i:nth-child(2) { right: -3px; top: -3px; border-width: 5px 5px 0 0; }
+.spike i:nth-child(3) { left: -3px; bottom: -3px; border-width: 0 0 5px 5px; }
+.spike i:nth-child(4) { right: -3px; bottom: -3px; border-width: 0 5px 5px 0; }
+.tape-label { position: absolute; left: 201px; top: 39px; height: 24px; padding: 0 10px; background: var(--tape); color: var(--on-tape); font: 600 13px/24px var(--display); letter-spacing: .01em; z-index: 2; }
+.click { position: absolute; left: 527px; top: 183px; width: 16px; height: 16px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.4); }
+.stage-meta { position: absolute; left: 12px; bottom: 10px; color: #fff; font-size: 12px; background: rgba(0,0,0,.45); padding: 2px 8px; border-radius: 4px; }
+/* inspector */
+.insp { position: absolute; top: 16px; right: 16px; width: 288px; height: 548px; background: var(--raised); border-radius: 12px; padding: 16px; }
+.insp h3 { font: 600 16px/20px var(--display); letter-spacing: -.01em; display: flex; align-items: center; gap: 8px; }
+.swatch-tape { width: 18px; height: 10px; background: var(--tape); }
+.insp .sub { color: var(--muted); margin-top: 2px; }
+.row { display: flex; align-items: center; justify-content: space-between; min-height: 32px; margin-top: 8px; }
+.row label { font-weight: 500; }
+.row .val { color: var(--text); }
+.full { display: flex; margin-top: 6px; }
+.full .seg { width: 100%; }
+.full .seg span { flex: 1; text-align: center; padding: 0 6px; }
+.slider { position: relative; height: 4px; background: var(--control); border-radius: 2px; margin: 6px 0 4px; }
+.slider b { position: absolute; left: 0; top: 0; height: 4px; width: 50%; background: var(--text); border-radius: 2px; }
+.slider i { position: absolute; left: 50%; top: -6px; width: 16px; height: 16px; margin-left: -8px; border-radius: 50%; background: var(--sheet); border: 1px solid var(--control); box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+.ticks { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; }
+.hr { height: 1px; background: var(--border); margin: 14px 0 10px; }
+.insp h4 { font: 600 13px/18px var(--font); }
+.sw { display: flex; gap: 6px; }
+.sw i { width: 22px; height: 22px; border-radius: 5px; }
+.sw i.on { box-shadow: 0 0 0 2px var(--raised), 0 0 0 4px var(--text); }
+.toggle { width: 28px; height: 16px; border-radius: 8px; background: var(--text); position: relative; }
+.toggle::after { content: ""; position: absolute; right: 2px; top: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--raised); }
+.link { color: var(--muted); text-decoration: underline; text-underline-offset: 2px; }
+/* timeline: 16 from sheet edges, 248 tall */
+.tl { position: absolute; left: 16px; right: 16px; bottom: 16px; height: 248px; }
+.tl-head { display: flex; align-items: center; gap: 12px; height: 32px; }
+.play { width: 28px; height: 28px; border-radius: 6px; background: var(--raised); display: grid; place-items: center; }
+.play::before { content: ""; border-left: 9px solid var(--text); border-top: 6px solid transparent; border-bottom: 6px solid transparent; margin-left: 2px; }
+.tl-head .time { font: 500 15px/20px var(--font); }
+.tl-head .time span { color: var(--muted); }
+.fits { margin-left: auto; color: var(--muted); }
+.fits b { color: var(--text); font-weight: 500; }
+.lanes { position: relative; margin-top: 8px; display: grid; grid-template-columns: 64px 1fr; row-gap: 6px; }
+.lname { color: var(--muted); font-size: 12px; align-self: center; }
+.track { position: relative; }
+.ruler { height: 20px; color: var(--muted); font-size: 11px; }
+.ruler span { position: absolute; top: 0; transform: translateX(-1px); padding-left: 4px; border-left: 1px solid var(--control); height: 14px; line-height: 12px; }
+.video { height: 56px; border-radius: 6px; background: var(--raised) left center / 56px 56px repeat-x; overflow: hidden; }
+.trim { position: absolute; top: 0; bottom: 0; width: 10px; background: var(--text); }
+.trim.l { left: 0; border-radius: 6px 0 0 6px; } .trim.r { right: 0; border-radius: 0 6px 6px 0; }
+.zoom { height: 46px; background: var(--raised); border-radius: 6px; }
+.mark { position: absolute; top: 4px; height: 22px; left: calc(var(--a) / var(--dur) * 100%); width: calc((var(--b) - var(--a)) / var(--dur) * 100%);
+  background: var(--tape); color: var(--on-tape); font: 600 12px/22px var(--display); padding: 0 6px; white-space: nowrap; }
+.mark.on { box-shadow: 0 0 0 2px var(--sheet), 0 0 0 4px var(--text); }
+.mark .ramp { position: absolute; top: 0; bottom: 0; width: calc(var(--r) / (var(--b) - var(--a)) * 100%); background: rgba(26,7,16,.16); }
+.mark .ramp.in { left: 0; } .mark .ramp.out { right: 0; }
+.mark span { position: relative; }
+.mark em { position: absolute; left: 0; top: 24px; font: 400 11px/14px var(--font); color: var(--muted); font-style: normal; }
+.clicks { height: 20px; }
+.clicks i { position: absolute; top: 5px; left: calc(var(--t) / var(--dur) * 100%); width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; background: var(--text); }
+.playhead { position: absolute; top: -4px; bottom: -4px; left: calc(8.6 / var(--dur) * 100%); width: 2px; margin-left: -1px; background: var(--text); }
+.playhead::before { content: ""; position: absolute; top: -2px; left: -5px; width: 12px; height: 8px; background: var(--text); border-radius: 2px; }
+.hint { margin-top: 10px; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <div class="lights"><i></i><i></i><i></i></div>
+  <div class="doc"><b>Shelf Tile Board demo</b><span class="num">Window, 848 × 858 pt, 60 fps, recorded today 10:42</span></div>
+  <div class="tools">
+    <span class="btn"><span class="dot"></span>Record <span class="kbd">⌃⌥⌘R</span></span>
+    <span class="btn primary">Export <span class="kbd">⌘E</span></span>
+  </div>
+</div>
+<aside class="side">
+  <h2>Takes</h2>
+  <div class="take on"><div class="thumb ft"></div><div><b>Shelf Tile Board demo</b><span class="num">0:48 · 5 zooms</span></div></div>
+  <div class="take"><div class="thumb ft"></div><div><b>Shelf Tile Board, take 1</b><span class="num">1:13 · 7 zooms</span></div></div>
+  <div class="take"><div class="thumb" style="background:#2E5A73"></div><div><b>Snap all-in-one toolbar</b><span class="num">0:36 · exported</span></div></div>
+  <div class="take"><div class="thumb" style="background:#4C6B5A"></div><div><b>Tidy check up</b><span class="num">0:52 · exported</span></div></div>
+  <div class="foot">Takes live in ~/Movies/Dolly. 4 takes, 1.9 GB.</div>
+</aside>
+<main class="sheet">
+  <section class="work">
+    <div class="shapes">
+      <div class="seg"><span class="on">16:9</span><span>1:1</span><span>4:5</span><span>9:16</span></div>
+      <span class="note num">Exports 1920 × 1080 for X and Threads</span>
+    </div>
+    <div class="stage">
+      <div class="foot-img ft"></div>
+      <div class="scrim"></div>
+      <div class="tape-label">2.0×  Run check up</div>
+      <div class="spike"><i></i><i></i><i></i><i></i></div>
+      <div class="click"></div>
+      <div class="stage-meta num">Drag the marks to re-aim. Drag a corner to change depth.</div>
+    </div>
+  </section>
+  <aside class="insp">
+    <h3><span class="swatch-tape"></span>Zoom 2 of 5</h3>
+    <p class="sub num">0:07.4 to 0:10.1, 2.7 s. From your click at 0:07.9.</p>
+    <div class="full"><div class="seg"><span class="on">Hold on the click</span><span>Follow pointer</span></div></div>
+    <div class="row"><label>Depth</label><span class="val num">2.0×</span></div>
+    <div class="slider"><b></b><i></i></div>
+    <div class="ticks num"><span>1×</span><span>2×</span><span>3×</span></div>
+    <div class="row"><label>Move in</label><span class="val num">0.6 s</span></div>
+    <div class="row" style="margin-top:0"><label>Move out</label><span class="val num">0.5 s</span></div>
+    <div class="row" style="margin-top:4px"><span class="link">Remove this zoom</span><span class="kbd">⌫</span></div>
+    <div class="hr"></div>
+    <h4>Look</h4>
+    <div class="row"><label>Background</label><div class="sw"><i class="on" style="background:#3E4A4F"></i><i style="background:#D9CFC0"></i><i style="background:#1F2A44"></i><i style="background:#F2F2F2;box-shadow:inset 0 0 0 1px var(--control)"></i><i style="background:#7A3B2E"></i></div></div>
+    <div class="row" style="margin-top:2px"><label>Padding</label><span class="val num">64 pt</span></div>
+    <div class="row" style="margin-top:0"><label>Pointer size</label><span class="val num">1.5×</span></div>
+    <div class="row" style="margin-top:0"><label>Smooth pointer path</label><span class="toggle"></span></div>
+    <div class="row" style="margin-top:0"><label>Ring on each click</label><span class="toggle"></span></div>
+  </aside>
+  <section class="tl">
+    <div class="tl-head">
+      <span class="play"></span>
+      <span class="time num">0:08.6 <span>/ 0:48.2</span></span>
+      <span class="fits num">Fits <b>X</b> (2:20 max) and <b>Threads</b> (5:00 max)</span>
+    </div>
+    <div class="lanes">
+      <span></span>
+      <div class="track ruler num">
+        <span style="left:0%">0:00</span><span style="left:calc(5/48.2*100%)">0:05</span><span style="left:calc(10/48.2*100%)">0:10</span><span style="left:calc(15/48.2*100%)">0:15</span><span style="left:calc(20/48.2*100%)">0:20</span><span style="left:calc(25/48.2*100%)">0:25</span><span style="left:calc(30/48.2*100%)">0:30</span><span style="left:calc(35/48.2*100%)">0:35</span><span style="left:calc(40/48.2*100%)">0:40</span><span style="left:calc(45/48.2*100%)">0:45</span>
+      </div>
+      <span class="lname">Video</span>
+      <div class="track video ft-strip"><i class="trim l"></i><i class="trim r"></i></div>
+      <span class="lname">Zoom</span>
+      <div class="track zoom">
+        <div class="mark" style="--a:2.1;--b:5.0;--r:.6"><i class="ramp in"></i><i class="ramp out"></i><span>1.6×</span><em>Haul tile</em></div>
+        <div class="mark on" style="--a:7.4;--b:10.1;--r:.6"><i class="ramp in"></i><i class="ramp out"></i><span>2.0×</span><em>Run check up</em></div>
+        <div class="mark" style="--a:14.8;--b:21.3;--r:.6"><i class="ramp in"></i><i class="ramp out"></i><span>1.8×, follows pointer</span><em>Update and Tidy tile</em></div>
+        <div class="mark" style="--a:27.0;--b:31.6;--r:.6"><i class="ramp in"></i><i class="ramp out"></i><span>2.2×</span><em>Capture area</em></div>
+        <div class="mark" style="--a:38.2;--b:44.0;--r:.6"><i class="ramp in"></i><i class="ramp out"></i><span>1.5×</span><em>New episode</em></div>
+      </div>
+      <span class="lname">Clicks</span>
+      <div class="track clicks">
+        <i style="--t:2.4"></i><i style="--t:7.9"></i><i style="--t:15.2"></i><i style="--t:17.0"></i><i style="--t:19.8"></i><i style="--t:27.6"></i><i style="--t:29.9"></i><i style="--t:38.9"></i><i style="--t:41.2"></i>
+      </div>
+      <span></span>
+      <div class="track" style="height:0"><i class="playhead" style="top:-150px;bottom:-4px"></i></div>
+    </div>
+    <p class="hint num">9 clicks became 5 zooms. Clicks less than 3 s apart share one zoom. Press Z to add a zoom at the playhead.</p>
+  </section>
+</main>
+<script>
+const theme = new URLSearchParams(location.search).get('theme') || 'light';
+document.documentElement.dataset.theme = theme;
+const src = `../assets/footage-${theme}.png`;
+document.querySelectorAll('.ft').forEach(e => e.style.backgroundImage = `url(${src})`);
+document.querySelectorAll('.ft-strip').forEach(e => e.style.backgroundImage = `url(${src})`);
+</script>
+</body>
+</html>
