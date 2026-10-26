@@ -12,3 +12,15 @@ public enum TimeText {
             : "\(minutes):" + secondText
     }
 }
+
+extension TimeText {
+    public static func seconds(_ s: Double) -> String { String(format: "%.1f s", s) }
+
+    /// Whole seconds, `0:48` or `1:02:05`.
+    public static func short(_ s: Double) -> String {
+        let total = Int(max(0, s).rounded())
+        return total >= 3600
+            ? String(format: "%d:%02d:%02d", total / 3600, total / 60 % 60, total % 60)
+            : String(format: "%d:%02d", total / 60, total % 60)
+    }
+}
