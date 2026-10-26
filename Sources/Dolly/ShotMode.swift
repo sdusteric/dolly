@@ -86,7 +86,10 @@ enum ShotWorkspace {
         let clicks = editor.pointer?.clicks ?? []
         return EditorWorkspace(editor: editor,
                                stage: AnyView(StageView(editor: editor, image: still(editor, inputs), player: nil, isPlaying: false, clicks: clicks)),
-                               inspector: AnyView(Color.clear), timeline: AnyView(Color.clear))
+                               inspector: AnyView(Color.clear),
+                               timeline: AnyView(TimelineView(editor: editor, clickTimes: clicks.map(\.t),
+                                                              filmstrip: inputs.footage.map { Image(decorative: $0, scale: 1) },
+                                                              playback: nil, isPlaying: false)))
     }
 
     /// Aim mode shows the recording at 1x; play mode the output at the playhead with its pointer.

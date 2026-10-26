@@ -37,3 +37,16 @@ struct ShortcutHint: View {
 struct RecordDot: View {
     var body: some View { Circle().fill(Theme.record.color).frame(width: 8, height: 8) }
 }
+
+/// Square icon buttons on the raised tone (play): the active tone while pressed, 120 ms.
+struct IconButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .frame(width: 28, height: 28)
+            .background(RoundedRectangle(cornerRadius: Theme.Size.controlRadius)
+                .fill(configuration.isPressed ? Theme.active.color : Theme.raised.color))
+            .animation(reduceMotion ? nil : .easeOut(duration: Theme.Motion.press), value: configuration.isPressed)
+    }
+}
