@@ -58,7 +58,7 @@ enum ShotMode {
             AnyView(ShotWorkspace.view(editor: editor, scenario: options.scenario, inputs: inputs, scheme: options.scheme))
         }
         .frame(width: options.size.width, height: options.size.height)
-        .overlay(alignment: .top) { ShotOverlays.view(options.scenario) }
+        .overlay(alignment: .top) { ShotOverlays.view(options.scenario, editor: model.editor, footage: inputs.footage) }
         .environment(\.colorScheme, options.scheme)
         .environment(\.dollyShot, true)
         let renderer = ImageRenderer(content: view)
@@ -97,8 +97,12 @@ enum ShotWorkspace {
     /// Aim mode shows the recording at 1x; play mode the output at the playhead with its pointer.
     static func still(_ editor: EditorModel, _ inputs: ShotScenarios.Inputs) -> CGImage? {
         guard let footage = inputs.footage else { return nil }
+        if editor.selection != nil { return StillRenderer.render(take: editor.take, recording: footage, camera: nil, pointer: nil, ring: nil) }
+        return playStill(editor, footage)
+    }
+
+    static func playStill(_ editor: EditorModel, _ footage: CGImage) -> CGImage? {
         let take = editor.take
-        if editor.selection != nil { return StillRenderer.render(take: take, recording: footage, camera: nil, pointer: nil, ring: nil) }
         let layout = ShapeLayout(shape: .wide16x9, recordingSize: take.size, padding: take.look.padding)
         let pointer = editor.pointer
         let path = CameraPath(zooms: take.zooms, layout: layout, pointer: pointer.map { p in { @Sendable t in p.position(at: t) } },
@@ -113,8 +117,29 @@ enum ShotWorkspace {
 /// Panels that float over the editor in the recording scenarios.
 @MainActor
 enum ShotOverlays {
-    @ViewBuilder static func view(_ scenario: String) -> some View {
+    /// Shot mode never exports; this only satisfies the sheet's model.
+    struct NoExporter: ExportRunning {
+        func export(_ plan: ExportPlan, takeFolder: URL, pointer: PointerPath?,
+                    progress: @escaping @Sendable (Double) -> Void) async throws -> URL { throw CancellationError() }
+    }
+
+    @ViewBuilder static func view(_ scenario: String, editor: EditorModel?, footage: CGImage?) -> some View {
         switch scenario {
+        case "export", "export-progress", "export-done":
+            if let editor {
+                let sheet = ExportSheetModel(editor: editor, takeFolder: URL(filePath: "/tmp"),
+                                             folder: URL(filePath: NSHomeDirectory() + "/Movies/Dolly"), exporter: NoExporter())
+                let _ = sheet.state = scenario == "export-progress" ? .exporting(progress: 0.62)
+                    : scenario == "export-done" ? .done([URL(filePath: "/x/Shelf Tile Board demo 16x9.mp4")]) : .ready
+                ZStack(alignment: .top) {
+                    Color.black.opacity(0.25)
+                    ExportSheet(model: sheet, poster: footage.flatMap { ShotWorkspace.playStill(editor, $0) }, chooseFolder: {},
+                                copy: { _ in }, reveal: { _ in }, close: {})
+                        .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 12, bottomTrailingRadius: 12))
+                        .shadow(color: .black.opacity(0.25), radius: 24, y: 8)
+                        .padding(.top, 52)
+                }
+            }
         case "record-bar":
             var model = RecordBarModel()
             let _ = model.windowID = 7

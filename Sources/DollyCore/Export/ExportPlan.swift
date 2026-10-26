@@ -32,3 +32,8 @@ public struct ExportPlan: Sendable, Hashable {
         return folder.appending(path: name, directoryHint: .notDirectory)
     }
 }
+
+/// Runs one export; `Exporter` (DollyRender) is the real one, tests pass a fake.
+public protocol ExportRunning: Sendable {
+    func export(_ plan: ExportPlan, takeFolder: URL, pointer: PointerPath?, progress: @escaping @Sendable (Double) -> Void) async throws -> URL
+}

@@ -141,6 +141,9 @@ public final class EditorModel {
 
     public func setLook(_ l: Look) { change { $0.look = l } }
 
+    /// Notes a finished export on the take. Not an edit, so it is not undoable.
+    public func recordExport(_ record: ExportRecord) { take.exports.append(record) }
+
     public func beginGesture() { gestureStart = take }
 
     public func endGesture() {

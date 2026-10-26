@@ -5,7 +5,7 @@ import Foundation
 /// Writes one shape of a take as an mp4 (spec 7): Dolly's compositor through
 /// `AVAssetReaderVideoCompositionOutput` into H.264 High at the plan's bit rate, moov first, to a
 /// hidden temp name and then a free final name, so nothing is ever overwritten. Cancellable.
-public final class Exporter: Sendable {
+public final class Exporter: ExportRunning {
     public init() {}
 
     public func export(

@@ -29,7 +29,7 @@ TMP_ROOT="${TMP_ROOT%/}"
 SIZE=1440x900
 TIMEOUT_SECONDS=60
 SCENARIOS=("$@")
-[ ${#SCENARIOS[@]} -gt 0 ] || SCENARIOS=(editor-empty editor stage-play record-bar countdown permission)
+[ ${#SCENARIOS[@]} -gt 0 ] || SCENARIOS=(editor-empty editor stage-play record-bar countdown permission export export-progress export-done)
 
 [ -x "$BIN" ] || { echo "no binary at $BIN (run scripts/bundle.sh --release)" >&2; exit 1; }
 if pgrep -if -- "$BIN" >/dev/null 2>&1; then
