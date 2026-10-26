@@ -34,5 +34,5 @@ Do the zooms land on the right things, and does any move feel seasick?
 | Any move that felt seasick (which one, what it did) | |
 | Approved for M1 | yes or no |
 
-If any move feels seasick, note the zoom's time and what it did (too fast, too deep, drifted,
-bounced). Those are tuning numbers in `ZoomRules` and `CameraPath`, not redesigns.
+If any move feels seasick, note the zoom's time and what it did: too fast, too deep, drifted or
+bounced. The fix is a number in `ZoomRules` or `CameraPath`.

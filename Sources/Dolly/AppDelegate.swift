@@ -1,11 +1,13 @@
 import AppKit
 import DollyCore
 import DollySystem
+import DollyUI
+import SwiftUI
 
 /// The real app: menus, the record hotkey, `dolly://` actions from Shelf, Sparkle, and the editor
 /// and recording wiring. Shot mode never creates it.
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSWindowDelegate {
     private let paths = DollyPaths()
     private lazy var log = Log(paths: paths)
     private var editor: EditorController?
@@ -13,6 +15,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var hotkeys: HotkeyCenter?
     private var updater: Updater?
     private var pendingURLs: [URL] = []
+    private var settingsWindow: NSWindow?
+    private var settingsModel: SettingsScreenModel?
+    private let probe = ClickProbe()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let settings: DollyCore.Settings
@@ -78,6 +83,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
     }
 
+    // MARK: Settings
+
+    /// Holding Option while opening Settings shows Advanced (the owner's spike switches).
+    @objc func showSettings(_ sender: Any?) {
+        guard let editor else { return }
+        let advanced = AdvancedSettingsModel.showsAdvanced(optionHeld: NSEvent.modifierFlags.contains(.option))
+        let model = settingsModel ?? SettingsScreenModel(settings: editor.settings, showsAdvanced: advanced,
+                                                         takesFolder: (paths.exportsFolder.path(percentEncoded: false) as NSString).abbreviatingWithTildeInPath)
+        model.settings = editor.settings
+        model.showsAdvanced = advanced
+        model.revealTakes = { [paths] in NSWorkspace.shared.activateFileViewerSelecting([paths.takesFolder]) }
+        model.onChange = { [weak self] settings in
+            guard let self else { return }
+            self.editor?.apply(settings)
+            self.recording?.apply(settings)
+            if model.showsAdvanced { self.startProbe(model) }
+        }
+        settingsModel = model
+
+        let window = settingsWindow ?? NSWindow(contentRect: .zero, styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        if settingsWindow == nil {
+            window.title = "Settings"
+            window.isReleasedWhenClosed = false
+            window.delegate = self
+            window.contentView = NSHostingView(rootView: SettingsView(model: model))
+        }
+        window.setContentSize(window.contentView?.fittingSize ?? CGSize(width: 480, height: 240))
+        if settingsWindow == nil { window.center() }
+        settingsWindow = window
+        advanced ? startProbe(model) : probe.stop()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate()
+    }
+
+    private func startProbe(_ model: SettingsScreenModel) {
+        probe.start(source: model.settings.advanced.clickSource) { [weak model] point in
+            model?.lastClick = (point, Date())
+        }
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        if (notification.object as? NSWindow) === settingsWindow { probe.stop() }
+    }
+
     // MARK: Menu actions
 
     @objc func newRecording(_ sender: Any?) { recording?.openBar() }
@@ -118,6 +167,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let app = submenu(main, "Dolly")
         app.addItem(withTitle: "About Dolly", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         app.addItem(item("Check for Updates…", #selector(checkForUpdates(_:))))
+        app.addItem(.separator())
+        app.addItem(item("Settings…", #selector(showSettings(_:)), key: ","))
         app.addItem(.separator())
         app.addItem(withTitle: "Hide Dolly", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         let others = app.addItem(withTitle: "Hide Others", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")

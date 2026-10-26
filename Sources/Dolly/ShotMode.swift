@@ -136,7 +136,7 @@ enum ShotOverlays {
                     ExportSheet(model: sheet, poster: footage.flatMap { ShotWorkspace.playStill(editor, $0) }, chooseFolder: {},
                                 copy: { _ in }, reveal: { _ in }, close: {})
                         .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 12, bottomTrailingRadius: 12))
-                        .shadow(color: .black.opacity(0.25), radius: 24, y: 8)
+                        .compositingGroup().shadow(color: .black.opacity(0.25), radius: 24, y: 8)
                         .padding(.top, 52)
                 }
             }
@@ -149,12 +149,22 @@ enum ShotOverlays {
                 .padding(.top, 24)
         case "countdown":
             CountdownView(number: 2).frame(maxWidth: .infinity, maxHeight: .infinity)
+        case "settings":
+            let now = Date(timeIntervalSince1970: 1_800_000_000)
+            let model = SettingsScreenModel(settings: DollyCore.Settings(), showsAdvanced: true, takesFolder: "~/Movies/Dolly")
+            let _ = model.lastClick = (CGPoint(x: 512, y: 300), now.addingTimeInterval(-0.4))
+            ZStack {
+                Color.black.opacity(0.25)
+                SettingsView(model: model, now: now)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .compositingGroup().shadow(color: .black.opacity(0.25), radius: 24, y: 8)
+            }
         case "permission":
             ZStack {
                 Color.black.opacity(0.25)
                 PermissionWindowView(denied: false, allow: {}, openSettings: {})
                     .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .shadow(color: .black.opacity(0.25), radius: 24, y: 8)
+                    .compositingGroup().shadow(color: .black.opacity(0.25), radius: 24, y: 8)
             }
         default:
             EmptyView()

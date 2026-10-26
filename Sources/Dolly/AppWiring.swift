@@ -180,6 +180,14 @@ final class EditorController: NSObject, NSWindowDelegate {
         }
     }
 
+    /// From the Settings window.
+    func apply(_ settings: DollyCore.Settings) {
+        let shelfChanged = settings.showInShelf != self.settings.showInShelf
+        self.settings = settings
+        saveSettings()
+        if shelfChanged { writeShelfStatus() }
+    }
+
     private func useForNewTakes(_ look: Look) {
         settings.defaultLook = look
         saveSettings()

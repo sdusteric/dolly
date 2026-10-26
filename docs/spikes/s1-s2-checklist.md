@@ -1,8 +1,8 @@
 # Spikes S1 and S2: owner checklist
 
 Five minutes at the Mac, with Dolly installed. An agent can't click for you or read the permission
-panes, so these two checks are yours. Write the results in the table at the end. Dolly keeps
-polling and the arrow pointer (the safe defaults) unless both checks pass.
+panes, so these two checks are yours. Write the results in the table at the end. Until both
+pass, Dolly keeps the safe defaults: polling for clicks and the arrow pointer.
 
 ## Before you start
 

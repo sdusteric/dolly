@@ -56,7 +56,9 @@ public struct RecordBar: View {
         .padding(10)
         .background(RoundedRectangle(cornerRadius: 12).fill(Theme.sheet.color))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.border.color, lineWidth: 1))
-        // The bar floats over other apps, the one place a shadow belongs.
+        // The bar floats over other apps, the one place a shadow belongs. Grouped first, so only
+        // the bar casts it, not every button inside.
+        .compositingGroup()
         .shadow(color: .black.opacity(0.18), radius: 16, y: 6)
     }
 

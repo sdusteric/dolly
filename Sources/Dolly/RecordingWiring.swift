@@ -9,10 +9,11 @@ import SwiftUI
 /// RecordingController (spec 4). Owned by the app delegate; never created in shot mode or tests.
 @MainActor
 final class RecordingWiring {
-    let controller: RecordingController
+    private(set) var controller: RecordingController
     var onTake: (Take) -> Void = { _ in }
 
-    private let settings: DollyCore.Settings
+    private let paths: DollyPaths
+    private var settings: DollyCore.Settings
     private let shortcut: String
     private let areaPicker = AreaPicker()
     private var barPanel: NSPanel?
@@ -26,13 +27,26 @@ final class RecordingWiring {
     private var windows: [PickableWindow] = []
 
     init(paths: DollyPaths, settings: DollyCore.Settings) {
+        self.paths = paths
         self.settings = settings
         shortcut = settings.hotkey.displayString
-        controller = RecordingController(
+        controller = Self.makeController(paths: paths, settings: settings)
+    }
+
+    private static func makeController(paths: DollyPaths, settings: DollyCore.Settings) -> RecordingController {
+        RecordingController(
             store: TakeStore(paths: paths), source: LiveRecordingSource(),
             pointer: PointerSampler(clickSource: settings.advanced.clickSource, pointerShapes: settings.advanced.pointerShapes),
             clock: HostClock(), disk: LiveDiskSpace(), rules: ZoomRules(), namer: ZoomNamer()
         )
+    }
+
+    /// New Advanced switches take effect at the next recording, never during one.
+    func apply(_ settings: DollyCore.Settings) {
+        let changed = settings.advanced != self.settings.advanced
+        self.settings = settings
+        guard changed, case .idle = controller.state else { return }
+        controller = Self.makeController(paths: paths, settings: settings)
     }
 
     func hotkeyPressed() {
