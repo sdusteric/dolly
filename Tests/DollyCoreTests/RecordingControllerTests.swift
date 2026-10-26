@@ -15,8 +15,11 @@ final class FakePointerSampler: PointerSampling, @unchecked Sendable {
         url = pointerURL
     }
 
+    var failsToStop = false
+
     func stop() throws {
         stopped = true
+        if failsToStop { throw CocoaError(.fileWriteUnknown) }
         guard let url else { return }
         let writer = try PointerLogWriter(url: url)
         samples.forEach(writer.append)
@@ -38,17 +41,18 @@ final class FakePointerSampler: PointerSampling, @unchecked Sendable {
     @Test func countdownThenRecordsThenSavesTake() async throws {
         defer { try? FileManager.default.removeItem(at: home) }
         let pointer = FakePointerSampler()
-        pointer.samples = makeLog(presses: [(2.4, 2.49, 500, 500)], until: 3)
+        // 4 s, so the click at 2.4 s has room to move in, hold and move out before the end.
+        pointer.samples = makeLog(presses: [(2.4, 2.49, 500, 500)], until: 4)
         let clock = FakeClock()
-        let c = controller(source: FakeRecordingSource(options: .init(seconds: 3)), pointer: pointer, clock: clock)
+        let c = controller(source: FakeRecordingSource(options: .init(seconds: 4)), pointer: pointer, clock: clock)
         await c.start(plan: plan)
         #expect(clock.sleeps == [1, 1, 1])
         #expect(c.countdownSeen == [3, 2, 1])
         guard case .recording = c.state else { Issue.record("not recording: \(c.state)"); return }
-        let take = try #require(await c.requestStop(hostTime: 3.0))
+        let take = try #require(await c.requestStop(hostTime: 4.0))
         #expect(take.zooms.count == 1)
         #expect(take.recordingRect == CGRect(x: 0, y: 0, width: 1440, height: 900))
-        #expect(approx(take.duration, 3.0, tol: 0.05))
+        #expect(approx(take.duration, 4.0, tol: 0.05))
         #expect(take.name == "Untitled take 1")
         #expect(pointer.started && pointer.stopped)
         #expect(FileManager.default.fileExists(atPath: store.folder(for: take.id).appending(path: TakeStore.jsonName).path))
@@ -88,6 +92,39 @@ final class FakePointerSampler: PointerSampling, @unchecked Sendable {
         let c = controller(source: FakeRecordingSource(options: .init(seconds: 3, failOnStart: true)), pointer: FakePointerSampler())
         await c.start(plan: plan)
         #expect(c.state == .failed("Recording could not start"))
+    }
+
+    /// Review finding 3: a failed start leaves no empty folder behind as a broken sidebar row.
+    @Test func failedStartLeavesNoFolder() async {
+        defer { try? FileManager.default.removeItem(at: home) }
+        let c = controller(source: FakeRecordingSource(options: .init(seconds: 3, failOnStart: true)), pointer: FakePointerSampler())
+        await c.start(plan: plan)
+        #expect(store.list().isEmpty)
+    }
+
+    /// Review finding 2: the stream stopping on its own (window closed) saves the take with a note.
+    @Test func streamStopEventSavesTakeWithNote() async throws {
+        defer { try? FileManager.default.removeItem(at: home) }
+        let source = FakeRecordingSource(options: .init(seconds: 1, stopEvent: .windowClosed))
+        let c = controller(source: source, pointer: FakePointerSampler())
+        await c.start(plan: plan)
+        for _ in 0..<400 where c.state != .idle { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(c.state == .idle)
+        #expect(c.lastTake?.notes == ["Stopped: the window closed"])
+    }
+
+    /// Review finding 4: a pointer log that fails to close still stops the screen and keeps the take.
+    @Test func pointerStopFailureStillStopsSourceAndSavesTake() async throws {
+        defer { try? FileManager.default.removeItem(at: home) }
+        let pointer = FakePointerSampler()
+        pointer.failsToStop = true
+        let source = FakeRecordingSource(options: .init(seconds: 1))
+        let c = controller(source: source, pointer: pointer)
+        await c.start(plan: plan)
+        let take = try #require(await c.requestStop(hostTime: 1.0))
+        #expect(source.stopped)
+        #expect(take.notes == [RecordingController.pointerLogNote])
+        #expect(c.state == .idle)
     }
 
     @Test func secondTakeIsNumberedTwo() async throws {

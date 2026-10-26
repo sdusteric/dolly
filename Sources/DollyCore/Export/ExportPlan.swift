@@ -16,16 +16,19 @@ public struct ExportPlan: Sendable, Hashable {
         self.folder = folder
     }
 
-    /// `<take name> 16x9.mp4`, with `/` and `:` made safe, and ` 2`, ` 3` added when a file of
-    /// that name already exists, so an export never overwrites.
+    /// `<take name> 16x9.mp4`, with `/` and `:` made safe and no leading dot, and ` 2`, ` 3` added
+    /// when a file of that name exists in any case (the folder is case-insensitive), so an export
+    /// never overwrites.
     public func outputURL(existing: Set<String>) -> URL {
         var base = take.name.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        while base.hasPrefix(".") { base.removeFirst() }
+        let taken = Set(existing.map { $0.lowercased() })
         if base.isEmpty { base = "Untitled take" }
         base += " \(shape.fileSuffix)"
         var name = base + ".mp4"
         var n = 2
-        while existing.contains(name) {
+        while taken.contains(name.lowercased()) {
             name = "\(base) \(n).mp4"
             n += 1
         }

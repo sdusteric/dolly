@@ -13,6 +13,9 @@ public final class RecordingController {
     public static let countdownFrom = 3
     public static let noDiskMessage = "Not enough disk space to record"
     public static let couldNotStartMessage = "Recording could not start"
+    public static let stopFailedMessage = "Stopped: the recording failed"
+    /// Kept on a take whose pointer log could not be closed; the movie is fine.
+    public static let pointerLogNote = "Some pointer moves were not saved"
 
     public private(set) var state: State = .idle
     public private(set) var countdownSeen: [Int] = []
@@ -60,14 +63,24 @@ public final class RecordingController {
             }
         }
         let id = UUID()
+        let folder = store.folder(for: id)
         do {
-            let folder = try store.createFolder(for: id)
+            _ = try store.createFolder(for: id)
             try pointer.start(pointerURL: folder.appending(path: TakeStore.pointerName),
                               windowLogURL: plan.target == .window ? folder.appending(path: TakeStore.windowName) : nil,
                               windowID: plan.windowID)
-            try await source.start(plan: plan, movieURL: folder.appending(path: TakeStore.movieName)) { _ in }
+            // The stream can stop on its own (window closed, display gone, an error): save the take then.
+            try await source.start(plan: plan, movieURL: folder.appending(path: TakeStore.movieName)) { [weak self] event in
+                guard case .stopped(let reason) = event else { return }
+                Task { @MainActor in
+                    guard let self else { return }
+                    await self.stop(hostTime: self.clock.now(), reason: reason)
+                }
+            }
         } catch {
             try? pointer.stop()
+            // An empty folder would list as a broken take.
+            try? FileManager.default.removeItem(at: folder)
             state = .failed(Self.couldNotStartMessage)
             return
         }
@@ -95,8 +108,9 @@ public final class RecordingController {
         await stop(hostTime: hostTime, reason: .user)
     }
 
+    /// Stops for `reason`; the app uses it for quit and sleep, the stream's events for the rest.
     @discardableResult
-    private func stop(hostTime: Double, reason: RecordingStopReason) async -> Take? {
+    public func stop(hostTime: Double, reason: RecordingStopReason) async -> Take? {
         guard case .recording = state, let plan, let id = takeID else { return nil }
         state = .finishing
         defer {
@@ -104,16 +118,30 @@ public final class RecordingController {
             takeID = nil
         }
         let folder = store.folder(for: id)
+        var notes = reason.note.map { [$0] } ?? []
+        // The screen stops first, so a pointer log error can never leave it recording.
+        let result: RecordingResult
+        do {
+            result = try await source.stop(atHostTime: hostTime)
+        } catch {
+            // take.mov keeps every fragment written so far; the folder lists as broken with Show in Finder.
+            try? pointer.stop()
+            state = .failed(Self.stopFailedMessage)
+            return nil
+        }
         do {
             try pointer.stop()
-            let result = try await source.stop()
+        } catch {
+            notes.append(Self.pointerLogNote)
+        }
+        do {
             let samples = (try? PointerLog.read(folder.appending(path: TakeStore.pointerName))) ?? []
             let frames = (try? WindowFrameLog.read(folder.appending(path: TakeStore.windowName))) ?? []
             let clicks = ClickDetector.clicks(from: samples, geometry: plan.geometry(windowFrames: frames),
                                               recordingStartHost: result.startHost, stopRequestHost: hostTime)
             var take = Take(id: id, name: nextName(), created: Date(), target: plan.target, size: plan.size,
                             pixelScale: plan.scale, fps: plan.fps, duration: result.duration,
-                            recordingStartHost: result.startHost, notes: reason.note.map { [$0] } ?? [])
+                            recordingStartHost: result.startHost, notes: notes)
             take.recordingRect = plan.globalRect
             take.zooms = rules.zooms(for: clicks, size: plan.size, target: plan.target, trim: take.trim)
             let movie = folder.appending(path: TakeStore.movieName)
@@ -127,10 +155,13 @@ public final class RecordingController {
             state = .idle
             return take
         } catch {
-            state = .failed("Stopped: the recording failed")
+            state = .failed(Self.stopFailedMessage)
             return nil
         }
     }
+
+    /// The folder of the take being recorded, which has no take.json until it stops.
+    public var recordingFolder: URL? { takeID.map(store.folder(for:)) }
 
     private var isFailed: Bool { if case .failed = state { true } else { false } }
 

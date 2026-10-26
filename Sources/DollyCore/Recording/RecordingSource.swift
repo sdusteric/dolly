@@ -38,7 +38,8 @@ public enum RecordingSourceError: Error, Sendable, Hashable { case couldNotStart
 /// `FakeRecordingSource` writes synthetic frames through the same `MasterWriter`.
 public protocol RecordingSource: AnyObject, Sendable {
     func start(plan: RecordingPlan, movieURL: URL, events: @escaping @Sendable (RecordingEvent) -> Void) async throws
-    func stop() async throws -> RecordingResult
+    /// `hostTime` is when the owner asked to stop; the take runs to it even if the screen was still.
+    func stop(atHostTime hostTime: Double) async throws -> RecordingResult
 }
 
 /// Samples the pointer and the recorded window's frame while recording (spec 4.3 and 4.4).

@@ -22,9 +22,10 @@ nonisolated public enum TakeFacts {
     }
 }
 
-/// The toolbar on the frame color (spec 6.1): the take's name and facts, Record and Export.
+/// The toolbar on the frame color (spec 6.1): the take's name (editable) and facts, Record and Export.
 struct ToolbarView: View {
     let title: String?
+    var rename: (String) -> Void = { _ in }
     let facts: String?
     let recordShortcut: String
     let canExport: Bool
@@ -45,8 +46,7 @@ struct ToolbarView: View {
             }
             Spacer().frame(width: showsWindowControls ? Theme.Size.sidebar - 80 : Theme.Size.sidebar)
             if let title {
-                Text(title).font(Theme.Font.display(15)).foregroundStyle(Theme.ink.color).lineLimit(1)
-                    .accessibilityAddTraits(.isHeader)
+                TakeTitleField(title: title, rename: rename)
             }
             if let facts {
                 Text(facts).font(Theme.Font.body).monospacedDigit().foregroundStyle(Theme.muted.color).lineLimit(1)
@@ -65,5 +65,48 @@ struct ToolbarView: View {
         }
         .padding(.trailing, 16)
         .frame(height: Theme.Size.toolbar)
+    }
+}
+
+/// The take's name, edited in place: Return or clicking away renames, Esc puts it back. The
+/// export file is named after it.
+private struct TakeTitleField: View {
+    let title: String
+    let rename: (String) -> Void
+    @State private var text = ""
+    @FocusState private var editing: Bool
+    @Environment(\.dollyShot) private var shot
+
+    var body: some View {
+        Group {
+            if shot {
+                Text(title)
+            } else {
+                TextField("Take name", text: $text)
+                    .textFieldStyle(.plain)
+                    .fixedSize()
+                    .focused($editing)
+                    .onAppear { text = title }
+                    .onChange(of: title) { text = title }
+                    .onSubmit { commit() }
+                    .onChange(of: editing) { if !editing { commit() } }
+                    .onExitCommand {
+                        text = title
+                        editing = false
+                    }
+                    .help("Rename this take. Exports use its name.")
+            }
+        }
+        .font(Theme.Font.display(15))
+        .foregroundStyle(Theme.ink.color)
+        .lineLimit(1)
+        .accessibilityLabel("Take name")
+        .accessibilityAddTraits(.isHeader)
+    }
+
+    private func commit() {
+        if text != title { rename(text) }
+        // A blank name is refused; an accepted one comes back through onChange(of: title).
+        text = title
     }
 }

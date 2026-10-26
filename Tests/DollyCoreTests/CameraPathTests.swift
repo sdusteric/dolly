@@ -17,6 +17,20 @@ import Testing
         Zoom(start: start, end: end, aim: aim, depth: depth, mode: mode, moveIn: 0.6, moveOut: 0.5, source: .manual, clickIDs: [], name: "")
     }
 
+    /// Review finding 7: moves longer than the zoom never make the depth jump between frames.
+    @Test func overlongMovesNeverJump() {
+        var z = zoom(1, 3, depth: 2, aim: CGPoint(x: 720, y: 450))
+        z.moveIn = 1.5
+        z.moveOut = 1.5
+        let path = CameraPath(zooms: [z], layout: displayLayout, pointer: nil, duration: 5)
+        var previous = path.camera(at: 0).depth
+        for i in 1...(5 * 60) {
+            let depth = path.camera(at: Double(i) / 60).depth
+            #expect(abs(depth - previous) < 0.1, "jump at \(Double(i) / 60)")
+            previous = depth
+        }
+    }
+
     @Test func restsAtOneXOutsideZooms() throws {
         let rest = CameraState(depth: 1, center: CGPoint(x: shelfLayout.recordingRect.midX, y: shelfLayout.recordingRect.midY))
         #expect(try shelfPath().camera(at: 0.5) == rest)

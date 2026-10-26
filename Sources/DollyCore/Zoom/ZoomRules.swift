@@ -62,7 +62,8 @@ public struct ZoomRules: Codable, Hashable, Sendable {
             : group[0].point
         let start = max(start(of: group), trim.lowerBound)
         let end = min(end(of: group), trim.upperBound)
-        guard end > start else { return nil }
+        // Too close to the trim to move in, hold and move out: no zoom rather than a lurch.
+        guard end - start >= moveIn + moveOut + EditorModel.minGap - 1e-9 else { return nil }
         return Zoom(
             start: start, end: end, aim: aim, depth: min(max(depth, minDepth), maxDepth),
             mode: follow ? .follow : .hold, moveIn: moveIn, moveOut: moveOut, source: .auto,

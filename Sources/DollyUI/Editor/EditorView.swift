@@ -17,7 +17,8 @@ public struct EditorView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            ToolbarView(title: model.editor?.take.name, facts: model.editor.map { TakeFacts.line($0.take) },
+            ToolbarView(title: model.editor?.take.name, rename: { model.editor?.renameTake($0) },
+                        facts: model.editor.map { TakeFacts.line($0.take) },
                         recordShortcut: model.recordShortcut, canExport: model.editor != nil,
                         showsWindowControls: showsWindowControls, record: model.onRecord, export: model.onExport)
             HStack(spacing: 0) {

@@ -16,7 +16,10 @@ final class RecordingWiring {
     private var settings: DollyCore.Settings
     private let shortcut: String
     private let areaPicker = AreaPicker()
-    private var barPanel: NSPanel?
+    private var barPanel: KeyablePanel?
+    private var sleepObserver: NSObjectProtocol?
+    /// The Advanced switches the current controller was built with.
+    private var builtAdvanced: DollyCore.Settings.Advanced
     private var countdownPanel: NSPanel?
     private var permissionWindow: NSWindow?
     private var statusItem: NSStatusItem?
@@ -31,6 +34,12 @@ final class RecordingWiring {
         self.settings = settings
         shortcut = settings.hotkey.displayString
         controller = Self.makeController(paths: paths, settings: settings)
+        builtAdvanced = settings.advanced
+        sleepObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.willSleepNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.stopNow(reason: .sleep) }
+        }
     }
 
     private static func makeController(paths: DollyPaths, settings: DollyCore.Settings) -> RecordingController {
@@ -43,10 +52,44 @@ final class RecordingWiring {
 
     /// New Advanced switches take effect at the next recording, never during one.
     func apply(_ settings: DollyCore.Settings) {
-        let changed = settings.advanced != self.settings.advanced
         self.settings = settings
-        guard changed, case .idle = controller.state else { return }
-        controller = Self.makeController(paths: paths, settings: settings)
+        rebuildIfNeeded()
+    }
+
+    /// A change made while recording applies once the recording ends.
+    private func rebuildIfNeeded() {
+        guard settings.advanced != builtAdvanced else { return }
+        switch controller.state {
+        case .idle, .failed:
+            controller = Self.makeController(paths: paths, settings: settings)
+            builtAdvanced = settings.advanced
+        default: break
+        }
+    }
+
+    var currentFolder: URL? { controller.recordingFolder }
+
+    var isRecording: Bool {
+        switch controller.state {
+        case .recording, .finishing: true
+        default: false
+        }
+    }
+
+    /// Quit: finish the take so it is not left without take.json.
+    func stopForQuit() async {
+        if case .recording = controller.state {
+            await controller.stop(hostTime: HostClock().now(), reason: .quit)
+        }
+        finishTimer()
+    }
+
+    private func stopNow(reason: RecordingStopReason) {
+        guard case .recording = controller.state else { return }
+        Task {
+            await controller.stop(hostTime: HostClock().now(), reason: reason)
+            finishTimer()
+        }
     }
 
     func hotkeyPressed() {
@@ -58,7 +101,7 @@ final class RecordingWiring {
         }
     }
 
-    func openBar() {
+    private func openBar() {
         guard PermissionProbe.preflight() else { return showPermission(denied: false) }
         Task {
             windows = await WindowCatalog.windows()
@@ -76,7 +119,7 @@ final class RecordingWiring {
         let host = NSHostingView(rootView: view)
         let size = host.fittingSize
         let screen = NSScreen.main?.visibleFrame ?? .zero
-        let panel = barPanel ?? NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        let panel = barPanel ?? KeyablePanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.contentView = host
         panel.setFrame(CGRect(x: screen.midX - size.width / 2, y: screen.maxY - size.height - 24, width: size.width, height: size.height), display: true)
         panel.level = .floating
@@ -113,6 +156,11 @@ final class RecordingWiring {
     }
 
     private func begin(target: TargetKind, displayID: UInt32, windowID: UInt32?, rect: CGRect, scale: Double) {
+        // The bar can stay open while a recording starts from the hotkey.
+        switch controller.state {
+        case .idle, .failed: break
+        default: return
+        }
         guard let plan = try? RecordingPlan.make(target: target, displayID: displayID, windowID: windowID, globalRect: rect, scale: scale) else {
             NSSound.beep()
             return
@@ -123,9 +171,12 @@ final class RecordingWiring {
             countdownPanel?.orderOut(nil)
             countdownPanel = nil
             if case .recording = controller.state { showStatusTimer() }
-            if case .failed(let message) = controller.state, message == RecordingController.couldNotStartMessage,
-               !PermissionProbe.preflight() {
-                showPermission(denied: true)
+            if case .failed(let message) = controller.state {
+                if message == RecordingController.couldNotStartMessage, !PermissionProbe.preflight() {
+                    showPermission(denied: true)
+                } else {
+                    showFailure(message)
+                }
             }
         }
     }
@@ -145,6 +196,7 @@ final class RecordingWiring {
     }
 
     private func showStatusTimer() {
+        guard statusItem == nil else { return }
         startedAt = Date()
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         let host = NSHostingView(rootView: StatusTimerView(elapsed: 0))
@@ -165,10 +217,13 @@ final class RecordingWiring {
                 let elapsed = Date().timeIntervalSince(self.startedAt)
                 self.statusHost?.rootView = StatusTimerView(elapsed: elapsed)
                 self.statusItem?.button?.toolTip = RecordBarModel.tooltip(elapsed: elapsed, shortcut: self.shortcut)
-                if seconds % 5 == 0 {
-                    Task {
-                        await self.controller.tick(hostTime: HostClock().now())
-                        if case .recording = self.controller.state {} else { self.finishTimer() }
+                // A stream that stopped on its own shows within a second; disk and length every 5 s.
+                let checkDisk = seconds % 5 == 0
+                Task {
+                    if checkDisk { await self.controller.tick(hostTime: HostClock().now()) }
+                    switch self.controller.state {
+                    case .recording, .finishing: break
+                    default: self.finishTimer()
                     }
                 }
             }
@@ -179,17 +234,44 @@ final class RecordingWiring {
 
     private func stop() async {
         let take = await controller.requestStop(hostTime: HostClock().now())
-        finishTimer()
-        if let take { onTake(take) }
+        // The 1 s ticker may have seen the stop first and already opened the take.
+        guard statusItem != nil || ticker != nil else { return }
+        clearTimer()
+        if let take {
+            onTake(take)
+        } else if case .failed(let message) = controller.state {
+            showFailure(message)
+        }
     }
 
+    /// The recording ended without the owner's stop (window closed, disk, length, sleep, an error):
+    /// open the take it saved, or say why there is none.
     private func finishTimer() {
+        guard statusItem != nil || ticker != nil else { return rebuildIfNeeded() }
+        clearTimer()
+        switch controller.state {
+        case .failed(let message): showFailure(message)
+        default: if let take = controller.lastTake { onTake(take) }
+        }
+    }
+
+    private func clearTimer() {
         ticker?.invalidate()
         ticker = nil
         if let statusItem { NSStatusBar.system.removeStatusItem(statusItem) }
         statusItem = nil
         statusHost = nil
-        if let take = controller.lastTake, !take.notes.isEmpty { onTake(take) }
+        rebuildIfNeeded()
+    }
+
+    private func showFailure(_ message: String) {
+        let alert = NSAlert()
+        alert.messageText = message
+        alert.informativeText = message == RecordingController.noDiskMessage
+            ? "Dolly needs 2 GB free to start a recording."
+            : "If a take was started, its folder in ~/Movies/Dolly/Takes keeps what was recorded."
+        NSApp.activate()
+        alert.runModal()
     }
 
     // MARK: Permission

@@ -21,6 +21,8 @@ public final class LiveRecordingSource: NSObject, RecordingSource, SCStreamOutpu
         var lastPTS: CMTime?
         var events: (@Sendable (RecordingEvent) -> Void)?
         var fps = 60
+        /// Seconds from the first frame to the stop request, set by stop() before the writer finishes.
+        var end: Double?
     }
 
     private let lock = NSLock()
@@ -69,27 +71,39 @@ public final class LiveRecordingSource: NSObject, RecordingSource, SCStreamOutpu
         let configuration = Self.streamConfiguration(for: plan, displayFrame: CGDisplayBounds(display.displayID).flippedToGlobal)
         let writer = try MasterWriter(url: movieURL, pixelSize: plan.pixelSize, fps: plan.fps, realTime: true)
         let (frames, continuation) = AsyncStream<Frame>.makeStream(bufferingPolicy: .bufferingNewest(plan.queueDepth * 4))
-        let consumer = Task {
+        let consumer = Task { [self] in
             for await frame in frames { try await writer.append(frame.buffer, at: frame.time) }
-            try await writer.finish()
+            try await writer.finish(endingAt: lock.withLock { state.end })
         }
         let stream = SCStream(filter: filter, configuration: configuration, delegate: self)
-        try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: queue)
         lock.withLock { state = State(stream: stream, continuation: continuation, consumer: consumer, events: events, fps: plan.fps) }
-        try await stream.startCapture()
+        do {
+            try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: queue)
+            try await stream.startCapture()
+        } catch {
+            // Nothing was written: end the consumer so neither it nor the writer is left waiting.
+            continuation.finish()
+            consumer.cancel()
+            lock.withLock { state = State() }
+            throw error
+        }
     }
 
-    public func stop() async throws -> RecordingResult {
+    public func stop(atHostTime hostTime: Double) async throws -> RecordingResult {
         let (stream, continuation, consumer) = lock.withLock { (state.stream, state.continuation, state.consumer) }
         guard let stream, let consumer else { throw RecordingSourceError.notRecording }
         try? await stream.stopCapture()
+        let (first, end) = lock.withLock {
+            let s = state
+            let first = s.firstPTS?.seconds ?? hostTime, last = s.lastPTS?.seconds ?? first
+            // A still screen sends no frames, so the take runs to the stop request, not the last frame.
+            let end = max(last - first + 1 / Double(s.fps), hostTime - first)
+            state.end = end
+            return (first, end)
+        }
         continuation?.finish()
         try await consumer.value
-        return lock.withLock {
-            let s = state
-            let first = s.firstPTS?.seconds ?? 0, last = s.lastPTS?.seconds ?? first
-            return RecordingResult(duration: last - first + 1 / Double(s.fps), startHost: first)
-        }
+        return RecordingResult(duration: end, startHost: first)
     }
 
     public func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {

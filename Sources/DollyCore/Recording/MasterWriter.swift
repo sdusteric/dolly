@@ -9,8 +9,11 @@ public final class MasterWriter {
     private let writer: AVAssetWriter
     private let video: AVAssetWriterInput.PixelBufferReceiver
     private var started = false
+    private var last: (frame: CVReadOnlyPixelBuffer, time: CMTime)?
+    private let fps: Int
 
     public init(url: URL, pixelSize: PixelSize, fps: Int, realTime: Bool = false) throws {
+        self.fps = fps
         writer = try AVAssetWriter(outputURL: url, fileType: .mov)
         writer.movieFragmentInterval = CMTime(seconds: RecordingPlan.fragmentInterval, preferredTimescale: 600)
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
@@ -37,10 +40,23 @@ public final class MasterWriter {
             started = true
         }
         _ = try await WriterInputAppend.untilAccepted { try video.appendImmediately(frame, with: time) }
+        last = (frame, time)
     }
 
-    public func finish() async throws {
+    /// `endingAt` (seconds from the first frame) keeps a still tail: the screen sends no frames
+    /// while nothing changes, so the last frame is repeated one frame before the end and the
+    /// session ends there.
+    public func finish(endingAt end: Double? = nil) async throws {
         guard started else { throw RecordingSourceError.notRecording }
+        if let end, let last {
+            let frame = 1 / Double(fps)
+            let endTime = CMTime(seconds: end, preferredTimescale: 600)
+            let repeatTime = CMTime(seconds: end - frame, preferredTimescale: 600)
+            if repeatTime > last.time {
+                _ = try await WriterInputAppend.untilAccepted { try video.appendImmediately(last.frame, with: repeatTime) }
+            }
+            if endTime > last.time { writer.endSession(atSourceTime: endTime) }
+        }
         video.finish()
         await writer.finishWriting()
         if writer.status != .completed { throw writer.error ?? RecordingSourceError.notRecording }

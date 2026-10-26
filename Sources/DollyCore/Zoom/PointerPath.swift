@@ -12,6 +12,10 @@ public struct PointerPath: Sendable {
     public static let stillAfter = 3.0
     public static let stillDistance = 1.0
 
+    private let samples: [PointerSample]
+    private let geometry: RecordingGeometry
+    private let recordingStartHost: Double
+    public let look: Look
     private let raw: [CGPoint?]
     private let drawn: [CGPoint?]
     private let shapes: [PointerShape]
@@ -19,6 +23,10 @@ public struct PointerPath: Sendable {
 
     public init(samples: [PointerSample], geometry: RecordingGeometry, clicks: [Click], recordingStartHost: Double, look: Look) {
         self.clicks = clicks
+        self.samples = samples
+        self.geometry = geometry
+        self.recordingStartHost = recordingStartHost
+        self.look = look
         let sorted = samples.sorted { $0.t < $1.t }
         let end = (sorted.last?.t ?? recordingStartHost) - recordingStartHost
         let count = max(Int((end * Self.rate).rounded()) + 1, 0)
@@ -71,6 +79,11 @@ public struct PointerPath: Sendable {
             drawn.append(look.hideWhenStill && t - lastMove > Self.stillAfter ? nil : shown)
         }
         self.drawn = drawn
+    }
+
+    /// The same log drawn with another look (Smooth pointer path, Hide when still).
+    public func with(look: Look) -> PointerPath {
+        PointerPath(samples: samples, geometry: geometry, clicks: clicks, recordingStartHost: recordingStartHost, look: look)
     }
 
     private func index(_ t: Double) -> Int? {

@@ -15,6 +15,12 @@ import Testing
         #expect(plan("Demo").outputURL(existing: ["Demo 16x9.mp4", "Demo 16x9 2.mp4"]).lastPathComponent == "Demo 16x9 3.mp4")
     }
 
+    /// The exports folder is case-insensitive, and a leading dot would hide the file.
+    @Test func nameClashIgnoresCaseAndNeverHides() {
+        #expect(plan("Demo").outputURL(existing: ["demo 16X9.mp4"]).lastPathComponent == "Demo 16x9 2.mp4")
+        #expect(plan(".hidden").outputURL(existing: []).lastPathComponent == "hidden 16x9.mp4")
+    }
+
     @Test func emptyNameStillGetsAFile() {
         #expect(plan("  ").outputURL(existing: []).lastPathComponent == "Untitled take 16x9.mp4")
     }

@@ -16,7 +16,8 @@ public final class EditorModel {
     public private(set) var take: Take
     public var selection: Zoom.ID?
     public var playhead: Double = 0
-    public let pointer: PointerPath?
+    /// Redrawn when the look's pointer settings change, so preview and export follow at once.
+    public private(set) var pointer: PointerPath?
     @ObservationIgnored private var history = UndoStack()
     /// While a drag runs, edits apply live and become one undo step when it ends.
     @ObservationIgnored private var gestureStart: Take?
@@ -83,10 +84,15 @@ public final class EditorModel {
         edit(id) { z, _, _ in z.mode = m }
     }
 
+    /// Moves never outgrow the zoom: each is capped so `moveIn + moveOut + 0.2` still fits.
     public func setMove(_ id: Zoom.ID, moveIn: Double?, moveOut: Double?) {
         edit(id) { z, _, _ in
-            if let moveIn { z.moveIn = Self.clamp(moveIn, Self.moveRange) }
-            if let moveOut { z.moveOut = Self.clamp(moveOut, Self.moveRange) }
+            let length = z.length
+            func room(_ other: Double) -> Double {
+                max(min(Self.moveRange.upperBound, length - Self.minGap - other), Self.moveRange.lowerBound)
+            }
+            if let moveIn { z.moveIn = min(Self.clamp(moveIn, Self.moveRange), room(z.moveOut)) }
+            if let moveOut { z.moveOut = min(Self.clamp(moveOut, Self.moveRange), room(z.moveIn)) }
         }
     }
 
@@ -127,9 +133,11 @@ public final class EditorModel {
     /// Clamps zooms into the new trim; a zoom left shorter than its minimum is removed.
     public func setTrim(_ r: ClosedRange<Double>) {
         let range = max(r.lowerBound, 0)...min(r.upperBound, take.duration)
+        // During a drag, start from the zooms before it, so dragging back brings them back.
+        let zooms = gestureStart?.zooms ?? take.zooms
         change { take in
             take.trim = range
-            take.zooms = take.zooms.compactMap { z in
+            take.zooms = zooms.compactMap { z in
                 var z = z
                 z.start = max(z.start, range.lowerBound)
                 z.end = min(z.end, range.upperBound)
@@ -141,6 +149,13 @@ public final class EditorModel {
 
     public func setLook(_ l: Look) { change { $0.look = l } }
 
+    /// The toolbar's name field. Blank names are ignored.
+    public func renameTake(_ name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        change { $0.name = trimmed }
+    }
+
     /// Notes a finished export on the take. Not an edit, so it is not undoable.
     public func recordExport(_ record: ExportRecord) { take.exports.append(record) }
 
@@ -151,12 +166,27 @@ public final class EditorModel {
         gestureStart = nil
     }
 
+    /// Exports are not edits, so undo and redo keep the current list.
     public func undo() {
-        if let previous = history.undo(take) { take = previous }
+        if var previous = history.undo(take) {
+            previous.exports = take.exports
+            set(previous)
+        }
     }
 
     public func redo() {
-        if let next = history.redo(take) { take = next }
+        if var next = history.redo(take) {
+            next.exports = take.exports
+            set(next)
+        }
+    }
+
+    private func set(_ next: Take) {
+        let old = take.look
+        take = next
+        if let pointer, old.smoothPointer != next.look.smoothPointer || old.hideWhenStill != next.look.hideWhenStill {
+            self.pointer = pointer.with(look: next.look)
+        }
     }
 
     // MARK: Helpers
@@ -174,7 +204,7 @@ public final class EditorModel {
         body(&next)
         guard next != take else { return }
         if gestureStart == nil { history.record(take) }
-        take = next
+        set(next)
     }
 
     /// Runs `body` on one zoom with the bounds its neighbors and the trim leave it.

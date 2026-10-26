@@ -73,7 +73,12 @@ public struct InspectorView: View {
                 .textFieldStyle(.roundedBorder)
                 .focused($naming)
                 .onAppear { name = zoom.name }
-                .onChange(of: zoom.id) { name = zoom.name }
+                // Switching zooms mid-edit keeps what was typed for the one being left.
+                .onChange(of: zoom.id) { old, _ in
+                    if naming, let left = editor.zoom(old), name != left.name { editor.rename(old, name) }
+                    name = zoom.name
+                }
+                .onChange(of: zoom.name) { if !naming { name = zoom.name } }
                 .onSubmit { editor.rename(zoom.id, name) }
                 .onChange(of: naming) { if !naming, name != zoom.name { editor.rename(zoom.id, name) } }
             }

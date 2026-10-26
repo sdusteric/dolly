@@ -63,9 +63,18 @@ import Testing
     }
 
     @Test func endClampedAtTrim() {
-        let z = ZoomRules().zooms(for: [Click(id: 0, t: 9.5, point: CGPoint(x: 10, y: 10))],
+        let z = ZoomRules().zooms(for: [Click(id: 0, t: 9.0, point: CGPoint(x: 10, y: 10))],
                                   size: CGSize(width: 1440, height: 900), target: .display, trim: 0...10)
         #expect(z[0].end == 10)
+    }
+
+    /// Review finding 7: a click too close to the end cannot move in and hold, so it makes no zoom
+    /// shorter than moveIn + moveOut + 0.2.
+    @Test func clickJustBeforeTheEndMakesNoShortZoom() {
+        let rules = ZoomRules()
+        let z = rules.zooms(for: [Click(id: 0, t: 9.8, point: CGPoint(x: 10, y: 10))],
+                            size: CGSize(width: 1440, height: 900), target: .display, trim: 0...10)
+        #expect(z.allSatisfy { $0.length >= $0.moveIn + $0.moveOut + 0.2 - 1e-9 })
     }
 
     @Test func noClicksNoZooms() {

@@ -1,3 +1,4 @@
+import Foundation
 import CoreGraphics
 import Testing
 @testable import DollyCore
@@ -21,6 +22,65 @@ import Testing
         #expect(approx(model.zoom(ids[1])!.start, model.zoom(ids[0])!.end))
         model.move(ids[1], by: 100)
         #expect(approx(model.zoom(ids[1])!.end, model.zoom(ids[2])!.start))
+    }
+
+    /// Review finding 7: longer moves never leave a zoom shorter than its moves, and a resize
+    /// afterwards still stops at the neighbor.
+    @Test func setMoveKeepsMinimumLengthAndNoOverlap() {
+        let id = ids[1]
+        model.setMove(id, moveIn: 1.5, moveOut: 1.5)
+        let z = model.zoom(id)!
+        #expect(z.length >= z.moveIn + z.moveOut + EditorModel.minGap - 1e-9)
+        model.resize(id, edge: .end, to: 1000)
+        #expect(model.zoom(id)!.end <= model.zoom(ids[2])!.start + 1e-9)
+    }
+
+    /// Review finding 8: the take's name is editable, one undo step, and it names the export.
+    @Test func renameTakeIsOneUndoStepAndNamesTheExport() {
+        model.renameTake("Demo: v2/final")
+        #expect(model.take.name == "Demo: v2/final")
+        let plan = ExportPlan(take: model.take, shape: .wide16x9, fps: 60, folder: URL(filePath: "/tmp"))
+        #expect(plan.outputURL(existing: []).lastPathComponent == "Demo- v2-final 16x9.mp4")
+        model.renameTake("   ")
+        #expect(model.take.name == "Demo: v2/final")
+        model.undo()
+        #expect(model.take.name == "Shelf Tile Board demo")
+    }
+
+    /// Undo never takes back an export: it is not an edit.
+    @Test func undoKeepsExports() {
+        model.setDepth(ids[0], 2.5)
+        model.recordExport(ExportRecord(shape: .wide16x9, url: URL(filePath: "/tmp/a.mp4"), date: Date()))
+        model.undo()
+        #expect(model.take.exports.count == 1)
+        #expect(model.zoom(ids[0])!.depth != 2.5)
+    }
+
+    /// Review finding 6: Smooth pointer path and Hide when still apply as soon as they change.
+    @Test func pointerFollowsTheLookLive() {
+        var look = model.take.look
+        look.smoothPointer = false
+        model.setLook(look)
+        // 3.0 s is mid-move between the first two clicks of the Shelf demo.
+        let p = model.pointer!
+        #expect(p.position(at: 3.0) == p.rawPosition(at: 3.0))
+        look.hideWhenStill = true
+        model.setLook(look)
+        // After the last click (41.2 s) the pointer rests, so it hides 3 s later.
+        #expect(model.pointer!.position(at: 46) == nil)
+        model.undo()
+        #expect(model.pointer!.position(at: 46) != nil)
+    }
+
+    /// Dragging the trim over a zoom and back in one gesture brings the zoom back.
+    @Test func trimDragBackRestoresZooms() {
+        let count = model.take.zooms.count
+        model.beginGesture()
+        model.setTrim(0...20)
+        #expect(model.take.zooms.count < count)
+        model.setTrim(0...48.2)
+        model.endGesture()
+        #expect(model.take.zooms.count == count)
     }
 
     @Test func resizeKeepsMinimumLength() {

@@ -34,12 +34,15 @@ public struct CameraPath: Sendable {
             return layout.rest
         }
         let z = zooms[i]
-        let inEnd = z.start + z.moveIn, outStart = z.end - z.moveOut
+        // Moves longer than the zoom shrink together, so the camera never jumps between frames.
+        let fit = min(1, z.length / max(z.moveIn + z.moveOut, 1e-6))
+        let moveIn = z.moveIn * fit, moveOut = z.moveOut * fit
+        let inEnd = z.start + moveIn, outStart = z.end - moveOut
         if t < inEnd {
-            return from[i].lerp(to: held(i, inEnd), Easing.inOut((t - z.start) / max(z.moveIn, 1e-6)))
+            return from[i].lerp(to: held(i, inEnd), Easing.inOut((t - z.start) / max(moveIn, 1e-6)))
         }
         if t < outStart { return held(i, t) }
-        return held(i, outStart).lerp(to: layout.rest, Easing.inOut((t - outStart) / max(z.moveOut, 1e-6)))
+        return held(i, outStart).lerp(to: layout.rest, Easing.inOut((t - outStart) / max(moveOut, 1e-6)))
     }
 
     private func held(_ i: Int, _ t: Double) -> CameraState {

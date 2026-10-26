@@ -6,7 +6,7 @@ import SwiftUI
 @MainActor
 public final class AreaPicker {
     public static let minimumSide: CGFloat = 64
-    private var panels: [NSPanel] = []
+    private var panels: [KeyablePanel] = []
     private var completion: ((CGRect?, NSScreen?) -> Void)?
 
     public init() {}
@@ -14,7 +14,7 @@ public final class AreaPicker {
     public func pick(_ completion: @escaping (CGRect?, NSScreen?) -> Void) {
         self.completion = completion
         panels = NSScreen.screens.map { screen in
-            let panel = NSPanel(contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+            let panel = KeyablePanel(contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
             panel.level = .screenSaver
             panel.backgroundColor = .clear
             panel.isOpaque = false
@@ -24,6 +24,7 @@ public final class AreaPicker {
             view.finish = { [weak self] rect in self?.finish(rect.map { panel.convertToScreen($0) }, screen) }
             panel.contentView = view
             panel.makeKeyAndOrderFront(nil)
+            panel.makeFirstResponder(view)
             return panel
         }
         NSCursor.crosshair.push()

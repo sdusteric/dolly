@@ -24,6 +24,20 @@ import Testing
         writer.abandon()
     }
 
+    /// Review finding 5: a still screen at the end sends no frames; the take still runs to the stop.
+    @Test func finishEndingLaterKeepsTheStillTail() async throws {
+        let url = tempURL("tail.mov")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let writer = try MasterWriter(url: url, pixelSize: PixelSize(width: 320, height: 200), fps: 30)
+        for i in 0...30 {
+            try await writer.append(SyntheticFrames.solid(width: 320, height: 200, shade: UInt8(i)),
+                                    at: CMTime(value: CMTimeValue(i), timescale: 30))
+        }
+        try await writer.finish(endingAt: 3)
+        let probe = await VideoProbe.probe(url, countFrames: false)
+        #expect(abs(probe.durationSeconds - 3) < 0.05)
+    }
+
     @Test func finishedWriterIsHEVCAtTheSize() async throws {
         let url = tempURL("done.mov")
         defer { try? FileManager.default.removeItem(at: url) }

@@ -22,7 +22,7 @@ final class EditorController: NSObject, NSWindowDelegate {
     private(set) var settings: DollyCore.Settings
     private let preview = PreviewPlayer()
     private var window: NSWindow?
-    private var folder: URL?
+    private let session: TakeSession
     private var filmstrip: Image?
     private var saveTask: Task<Void, Never>?
 
@@ -31,6 +31,7 @@ final class EditorController: NSObject, NSWindowDelegate {
         self.settings = settings
         self.log = log
         store = TakeStore(paths: paths)
+        session = TakeSession(store: store)
         settingsStore = SettingsStore(paths: paths)
         screen = EditorScreenModel(entries: [], totalBytes: 0, editor: nil, recordShortcut: settings.hotkey.displayString)
         super.init()
@@ -41,7 +42,7 @@ final class EditorController: NSObject, NSWindowDelegate {
     }
 
     var editor: EditorModel? { screen.editor }
-    var takeFolder: URL? { folder }
+    private var folder: URL? { session.folder }
 
     // MARK: Window
 
@@ -80,8 +81,12 @@ final class EditorController: NSObject, NSWindowDelegate {
 
     // MARK: Takes
 
+    /// The take being recorded has no take.json yet; it is left out until it is saved.
+    var recordingFolder: () -> URL? = { nil }
+
     func reloadTakes() {
-        screen.entries = store.list()
+        let recording = recordingFolder()?.standardizedFileURL
+        screen.entries = store.list().filter { $0.folder.standardizedFileURL != recording }
         screen.totalBytes = store.totalBytes()
         for case .ok(let take, let folder) in screen.entries where screen.posters[take.id] == nil {
             if let image = NSImage(contentsOf: folder.appending(path: TakeStore.posterName)) {
@@ -92,7 +97,7 @@ final class EditorController: NSObject, NSWindowDelegate {
 
     func open(_ entry: TakeEntry) {
         switch entry {
-        case .ok(let take, let folder): open(take, folder: folder)
+        case .ok(_, let folder): open(folder: folder)
         case .broken(let folder, _): NSWorkspace.shared.activateFileViewerSelecting([folder])
         }
     }
@@ -114,17 +119,25 @@ final class EditorController: NSObject, NSWindowDelegate {
         Task {
             await makePoster(take, folder: folder)
             reloadTakes()
-            open(take, folder: folder)
+            open(folder: folder)
             showWindow()
         }
     }
 
-    private func open(_ take: Take, folder: URL) {
-        saveNow()
+    /// Reads the take from disk (TakeSession), so reopening one keeps its saved edits.
+    private func open(folder: URL) {
+        saveTask?.cancel()
+        saveTask = nil
         preview.pause()
-        self.folder = folder
-        filmstrip = screen.posters[take.id]
-        let editor = EditorModel(take: take, pointer: TakeInputs.pointerPath(take: take, folder: folder))
+        let editor: EditorModel
+        do {
+            editor = try session.open(folder: folder)
+        } catch {
+            log.error("opening take \(folder.lastPathComponent) failed: \(error.localizedDescription)")
+            reloadTakes()
+            return
+        }
+        filmstrip = screen.posters[editor.take.id]
         screen.editor = editor
         preview.load(editor: editor, folder: folder)
         watchEdits(editor)
@@ -162,14 +175,20 @@ final class EditorController: NSObject, NSWindowDelegate {
         saveTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(500))
             guard !Task.isCancelled else { return }
-            self?.save(editor.take)
+            self?.saveNow()
         }
     }
 
+    /// Saves the open take and refreshes the sidebar, so its names and "exported" stay current.
     func saveNow() {
         saveTask?.cancel()
         saveTask = nil
-        if let editor = screen.editor { save(editor.take) }
+        do {
+            try session.save()
+        } catch {
+            log.error("saving take failed: \(error.localizedDescription)")
+        }
+        reloadTakes()
     }
 
     private func save(_ take: Take) {
@@ -180,10 +199,12 @@ final class EditorController: NSObject, NSWindowDelegate {
         }
     }
 
-    /// From the Settings window.
+    /// From the Settings window, which owns only Show in Shelf and the Advanced switches; the rest
+    /// may have changed elsewhere while it was open.
     func apply(_ settings: DollyCore.Settings) {
         let shelfChanged = settings.showInShelf != self.settings.showInShelf
-        self.settings = settings
+        self.settings.showInShelf = settings.showInShelf
+        self.settings.advanced = settings.advanced
         saveSettings()
         if shelfChanged { writeShelfStatus() }
     }
@@ -229,7 +250,10 @@ final class EditorController: NSObject, NSWindowDelegate {
         guard let editor = screen.editor, let folder, let window, window.attachedSheet == nil else { return }
         let model = ExportSheetModel(editor: editor, takeFolder: folder, folder: exportsFolder, exporter: Exporter())
         model.fps = settings.exportFPS
-        model.onExported = { [weak self] _ in self?.exported() }
+        model.onExported = { [weak self, weak model] _ in
+            if let fps = model?.fps, fps != self?.settings.exportFPS { self?.setExportFPS(fps) }
+            self?.exported()
+        }
         let sheet = NSWindow(contentRect: .zero, styleMask: [.titled], backing: .buffered, defer: false)
         let view = ExportSheet(
             model: model, poster: poster,
@@ -398,6 +422,8 @@ final class PreviewPlayer: PlaybackControlling {
                 guard !Task.isCancelled else { return }
                 install(AVPlayerItem(asset: built.asset), videoComposition: built.videoComposition, take: take)
             } catch {
+                if let timeObserver { player?.removeTimeObserver(timeObserver) }
+                timeObserver = nil
                 player = nil
             }
         }
@@ -452,6 +478,9 @@ final class PreviewPlayer: PlaybackControlling {
                 if !self.isPlaying {
                     self.seek(to: editor.playhead)
                     self.refreshFrame()
+                } else if abs(editor.playhead - self.lastSeek) > 0.05 {
+                    // A click on the ruler while playing: the player jumps there and plays on.
+                    self.seek(to: editor.playhead, force: true)
                 }
                 self.watchPlayhead(editor)
             }

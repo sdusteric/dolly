@@ -9,15 +9,20 @@ public final class FakeRecordingSource: RecordingSource {
         public var seconds: Double
         public var failOnStart: Bool
         public var startHost: Double
-        public init(seconds: Double, failOnStart: Bool = false, startHost: Double = 0) {
+        /// Sent after the last frame, as ScreenCaptureKit does when the window closes.
+        public var stopEvent: RecordingStopReason?
+        public init(seconds: Double, failOnStart: Bool = false, startHost: Double = 0, stopEvent: RecordingStopReason? = nil) {
             self.seconds = seconds
             self.failOnStart = failOnStart
             self.startHost = startHost
+            self.stopEvent = stopEvent
         }
     }
 
     public let options: Options
     private let task = Mutex<Task<Void, any Error>?>(nil)
+    private let didStop = Mutex(false)
+    public var stopped: Bool { didStop.withLock { $0 } }
 
     public init(options: Options) { self.options = options }
 
@@ -32,14 +37,16 @@ public final class FakeRecordingSource: RecordingSource {
                 try await writer.append(frame, at: CMTime(value: CMTimeValue(i), timescale: CMTimeScale(plan.fps)))
             }
             try await writer.finish()
+            if let reason = options.stopEvent { events(.stopped(reason)) }
         }
         task.withLock { $0 = job }
         // The real source reports .started after its first frame; wait for the writer to begin.
         try await Task.sleep(for: .milliseconds(1))
     }
 
-    public func stop() async throws -> RecordingResult {
+    public func stop(atHostTime hostTime: Double) async throws -> RecordingResult {
         guard let job = task.withLock({ $0 }) else { throw RecordingSourceError.notRecording }
+        didStop.withLock { $0 = true }
         try await job.value
         return RecordingResult(duration: options.seconds, startHost: options.startHost)
     }

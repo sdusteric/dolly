@@ -29,8 +29,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         updater = Updater.make()
         let editor = EditorController(paths: paths, settings: settings, log: log)
         let recording = RecordingWiring(paths: paths, settings: settings)
-        editor.onRecord = { [weak recording] in recording?.openBar() }
+        editor.onRecord = { [weak recording] in recording?.hotkeyPressed() }
         recording.onTake = { [weak editor] take in editor?.received(take) }
+        editor.recordingFolder = { [weak recording] in recording?.currentFolder }
         self.editor = editor
         self.recording = recording
 
@@ -63,6 +64,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
     /// Closing the editor keeps Dolly running so the record shortcut still works.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
+    /// Quitting mid-recording (Quit, logout, a Sparkle update) finishes the take first.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let recording, recording.isRecording else { return .terminateNow }
+        Task {
+            await recording.stopForQuit()
+            NSApp.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         editor?.saveNow()
         hotkeys?.unregisterAll()
@@ -77,7 +88,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
             return
         }
         switch action {
-        case .record: recording?.openBar()
+        case .record: recording?.hotkeyPressed()
         case .openLatest: editor?.openLatest()
         case .checkForUpdates: updater?.checkForUpdates()
         }
@@ -90,14 +101,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         guard let editor else { return }
         let advanced = AdvancedSettingsModel.showsAdvanced(optionHeld: NSEvent.modifierFlags.contains(.option))
         let model = settingsModel ?? SettingsScreenModel(settings: editor.settings, showsAdvanced: advanced,
-                                                         takesFolder: (paths.exportsFolder.path(percentEncoded: false) as NSString).abbreviatingWithTildeInPath)
+                                                         takesFolder: (paths.takesFolder.path(percentEncoded: false) as NSString).abbreviatingWithTildeInPath)
         model.settings = editor.settings
         model.showsAdvanced = advanced
         model.revealTakes = { [paths] in NSWorkspace.shared.activateFileViewerSelecting([paths.takesFolder]) }
         model.onChange = { [weak self] settings in
             guard let self else { return }
             self.editor?.apply(settings)
-            self.recording?.apply(settings)
+            if let merged = self.editor?.settings { self.recording?.apply(merged) }
             if model.showsAdvanced { self.startProbe(model) }
         }
         settingsModel = model
@@ -129,7 +140,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
 
     // MARK: Menu actions
 
-    @objc func newRecording(_ sender: Any?) { recording?.openBar() }
+    @objc func newRecording(_ sender: Any?) { recording?.hotkeyPressed() }
     @objc func exportTake(_ sender: Any?) { editor?.showExport() }
     @objc func showInFinder(_ sender: Any?) { editor?.revealTake() }
     @objc func showEditor(_ sender: Any?) { editor?.showWindow() }
