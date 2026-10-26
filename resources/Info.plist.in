@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key><string>en</string>
+  <key>CFBundleExecutable</key><string>Dolly</string>
+  <key>CFBundleIdentifier</key><string>@BUNDLE_ID@</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>CFBundleName</key><string>Dolly</string>
+  <key>CFBundleDisplayName</key><string>Dolly</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>@VERSION@</string>
+  <key>CFBundleVersion</key><string>@BUILD@</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
+  <key>LSApplicationCategoryType</key><string>public.app-category.video</string>
+  <key>LSMinimumSystemVersion</key><string>27.0</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSPrincipalClass</key><string>NSApplication</string>
+  <key>NSSupportsAutomaticTermination</key><false/>
+  <key>NSSupportsSuddenTermination</key><false/>
+  <!-- Asked only when the user turns the microphone on for a recording (spec 4.1). -->
+  <key>NSMicrophoneUsageDescription</key><string>Dolly records your microphone only during a recording you start with the microphone turned on.</string>
+
+  <!-- Shelf quick actions (spec section 3): dolly://<action>, allowlisted in DollyURL. -->
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key><string>@BUNDLE_ID@.shelf</string>
+      <key>CFBundleTypeRole</key><string>Viewer</string>
+      <key>CFBundleURLSchemes</key>
+      <array><string>dolly</string></array>
+    </dict>
+  </array>
+  <key>SDShelfActions</key>
+  <array><string>record</string><string>open-latest</string><string>check-for-updates</string></array>
+
+  <!-- Sparkle auto-update (app-updates CONTRACT.md). -->
+  <key>SUFeedURL</key><string>https://sdusteric.github.io/app-updates/dolly/appcast.xml</string>
+  <key>SUPublicEDKey</key><string>PMaW+8sZRzOkfIwy1KBGk0CHTVoN49FE9o8gUlNGdZc=</string>
+  <key>SUEnableAutomaticChecks</key><true/>
+  <key>SUAutomaticallyUpdate</key><true/>
+  <key>SUScheduledCheckInterval</key><integer>86400</integer>
+</dict>
+</plist>
