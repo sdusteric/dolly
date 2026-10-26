@@ -32,6 +32,9 @@ public struct Take: Codable, Hashable, Identifiable, Sendable {
     public var target: TargetKind
     /// The recorded content in points.
     public var size: CGSize
+    /// The recorded content in global points when recording started; maps the pointer log into the
+    /// take. Nil means the origin, which is what a window take needs (its log is window.bin).
+    public var recordingRect: CGRect?
     public var pixelScale: Double
     public var fps: Int
     public var duration: Double

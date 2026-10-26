@@ -15,6 +15,44 @@ public enum SyntheticTake {
             duration: 48.2
         )
     }
+
+    /// The nine left clicks of the Shelf demo, in recording points (plan Task 3).
+    public static let shelfDemoClicks: [(t: Double, x: Double, y: Double)] = [
+        (2.4, 360, 225), (7.9, 636, 318), (15.2, 605, 280), (17.0, 560, 300), (19.8, 600, 283),
+        (27.6, 383, 619), (29.9, 420, 619), (38.9, 715, 747), (41.2, 700, 747),
+    ]
+
+    /// The Shelf demo pointer log (`Fixtures/shelf-demo.csv`): 120 Hz for 48.2 s in a window at
+    /// global (0, 0, 848, 858). The pointer rests 0.3 s either side of each click, moves in straight
+    /// lines between them, and each press lasts 0.09 s.
+    public static func shelfDemoSamples() -> [PointerSample] {
+        let height = 858.0
+        let rest = 0.3, press = 0.09
+        // (leave time, point) then (arrive time, point) for each leg.
+        var legs: [(t0: Double, p0: CGPoint, t1: Double, p1: CGPoint)] = []
+        var leave = (t: rest, p: CGPoint(x: 424, y: 429))
+        for click in shelfDemoClicks {
+            let p = CGPoint(x: click.x, y: height - click.y)
+            legs.append((leave.t, leave.p, click.t - rest, p))
+            leave = (click.t + rest, p)
+        }
+        func position(_ t: Double) -> CGPoint {
+            guard let first = legs.first, t > first.t0 else { return legs.first?.p0 ?? .zero }
+            for leg in legs where t <= leg.t1 {
+                if t <= leg.t0 { return leg.p0 }
+                let f = (t - leg.t0) / (leg.t1 - leg.t0)
+                return CGPoint(x: leg.p0.x + (leg.p1.x - leg.p0.x) * f, y: leg.p0.y + (leg.p1.y - leg.p0.y) * f)
+            }
+            return leave.p
+        }
+        let round2 = { (v: Double) in Float((v * 100).rounded() / 100) }
+        return (0...Int(48.2 * 120)).map { i in
+            let t = (Double(i) / 120 * 1e6).rounded() / 1e6
+            let p = position(t)
+            let down = shelfDemoClicks.contains { t >= $0.t - 1e-9 && t < $0.t + press - 1e-9 }
+            return PointerSample(t: t, x: round2(p.x), y: round2(p.y), buttons: down ? 1 : 0, shape: .arrow)
+        }
+    }
 }
 
 import AVFoundation

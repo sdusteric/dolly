@@ -47,6 +47,7 @@ final class FakePointerSampler: PointerSampling, @unchecked Sendable {
         guard case .recording = c.state else { Issue.record("not recording: \(c.state)"); return }
         let take = try #require(await c.requestStop(hostTime: 3.0))
         #expect(take.zooms.count == 1)
+        #expect(take.recordingRect == CGRect(x: 0, y: 0, width: 1440, height: 900))
         #expect(approx(take.duration, 3.0, tol: 0.05))
         #expect(take.name == "Untitled take 1")
         #expect(pointer.started && pointer.stopped)

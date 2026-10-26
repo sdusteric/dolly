@@ -114,6 +114,7 @@ public final class RecordingController {
             var take = Take(id: id, name: nextName(), created: Date(), target: plan.target, size: plan.size,
                             pixelScale: plan.scale, fps: plan.fps, duration: result.duration,
                             recordingStartHost: result.startHost, notes: reason.note.map { [$0] } ?? [])
+            take.recordingRect = plan.globalRect
             take.zooms = rules.zooms(for: clicks, size: plan.size, target: plan.target, trim: take.trim)
             let movie = folder.appending(path: TakeStore.movieName)
             for (i, zoom) in take.zooms.enumerated() {
