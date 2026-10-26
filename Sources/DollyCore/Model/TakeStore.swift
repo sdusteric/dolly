@@ -84,8 +84,11 @@ public final class TakeStore: Sendable {
         ) else { return 0 }
         var total: Int64 = 0
         for case let url as URL in enumerator {
-            let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-            total += Int64(size)
+            do {
+                total += Int64(try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0)
+            } catch {
+                // A file that vanished mid-walk adds nothing to the footer's total.
+            }
         }
         return total
     }
