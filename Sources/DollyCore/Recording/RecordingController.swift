@@ -3,9 +3,10 @@ import Observation
 
 /// Countdown, recording and saving a take (spec 4 and 5.1). The app calls `tick` every 5 s while
 /// recording for the disk and length checks.
+@MainActor
 @Observable
 public final class RecordingController {
-    public enum State: Hashable, Sendable {
+    nonisolated public enum State: Hashable, Sendable {
         case idle, countdown(Int), recording(since: Double), finishing, failed(String)
     }
 
@@ -27,6 +28,7 @@ public final class RecordingController {
     @ObservationIgnored private var plan: RecordingPlan?
     @ObservationIgnored private var takeID: UUID?
     @ObservationIgnored private var startHost: Double?
+    @ObservationIgnored private var cancelled = false
 
     public init(store: TakeStore, source: any RecordingSource, pointer: any PointerSampling, clock: any DollyClock,
                 disk: any DiskSpaceProbing, rules: ZoomRules, namer: any ZoomNaming = FallbackZoomNamer()) {
@@ -47,10 +49,15 @@ public final class RecordingController {
             return
         }
         countdownSeen = []
+        cancelled = false
         for n in stride(from: Self.countdownFrom, through: 1, by: -1) {
             state = .countdown(n)
             countdownSeen.append(n)
             await clock.sleep(seconds: 1)
+            if cancelled {
+                state = .idle
+                return
+            }
         }
         let id = UUID()
         do {
@@ -67,6 +74,11 @@ public final class RecordingController {
         self.plan = plan
         takeID = id
         state = .recording(since: clock.now())
+    }
+
+    /// The hotkey during 3, 2, 1: nothing is recorded.
+    public func cancelCountdown() {
+        if case .countdown = state { cancelled = true }
     }
 
     /// Disk and length checks while recording; stops with a note when either runs out.

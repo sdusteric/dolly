@@ -24,7 +24,7 @@ final class FakePointerSampler: PointerSampling, @unchecked Sendable {
     }
 }
 
-@Suite struct RecordingControllerTests {
+@MainActor @Suite struct RecordingControllerTests {
     let home = tempURL("home")
     var store: TakeStore { TakeStore(paths: DollyPaths(environment: ["DOLLY_HOME": home.path])) }
     let plan = try! RecordingPlan.make(target: .display, displayID: 1, windowID: nil,
@@ -96,5 +96,31 @@ final class FakePointerSampler: PointerSampling, @unchecked Sendable {
             await c.start(plan: plan)
             #expect(try #require(await c.requestStop(hostTime: 1.0)).name == expected)
         }
+    }
+}
+
+/// Cancels the countdown from inside the first sleep, the way the hotkey would.
+final class CancellingClock: DollyClock, @unchecked Sendable {
+    weak var controller: RecordingController?
+    func now() -> Double { 0 }
+    func sleep(seconds: Double) async { await MainActor.run { controller?.cancelCountdown() } }
+}
+
+@Suite struct CountdownCancelTests {
+    @MainActor @Test func cancellingTheCountdownRecordsNothing() async throws {
+        let home = tempURL("home")
+        defer { try? FileManager.default.removeItem(at: home) }
+        let store = TakeStore(paths: DollyPaths(environment: ["DOLLY_HOME": home.path]))
+        let clock = CancellingClock()
+        let pointer = FakePointerSampler()
+        let c = RecordingController(store: store, source: FakeRecordingSource(options: .init(seconds: 1)), pointer: pointer,
+                                    clock: clock, disk: FakeDiskSpace(bytes: 50_000_000_000), rules: ZoomRules())
+        clock.controller = c
+        let plan = try RecordingPlan.make(target: .display, displayID: 1, windowID: nil,
+                                          globalRect: CGRect(x: 0, y: 0, width: 1440, height: 900), scale: 1, pixelSize: PixelSize(width: 320, height: 200))
+        await c.start(plan: plan)
+        #expect(c.state == .idle)
+        #expect(!pointer.started)
+        #expect(store.list().isEmpty)
     }
 }

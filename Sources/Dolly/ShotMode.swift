@@ -58,6 +58,7 @@ enum ShotMode {
             AnyView(ShotWorkspace.view(editor: editor, scenario: options.scenario, inputs: inputs, scheme: options.scheme))
         }
         .frame(width: options.size.width, height: options.size.height)
+        .overlay(alignment: .top) { ShotOverlays.view(options.scenario) }
         .environment(\.colorScheme, options.scheme)
         .environment(\.dollyShot, true)
         let renderer = ImageRenderer(content: view)
@@ -106,5 +107,32 @@ enum ShotWorkspace {
         return StillRenderer.render(take: take, recording: footage, camera: path.camera(at: t),
                                     pointer: pointer?.position(at: t).map { ($0, pointer?.shape(at: t) ?? .arrow) },
                                     ring: pointer?.ring(at: t).map { ($0.center, $0.progress) })
+    }
+}
+
+/// Panels that float over the editor in the recording scenarios.
+@MainActor
+enum ShotOverlays {
+    @ViewBuilder static func view(_ scenario: String) -> some View {
+        switch scenario {
+        case "record-bar":
+            var model = RecordBarModel()
+            let _ = model.windowID = 7
+            RecordBar(model: .constant(model), windows: [PickableWindow(id: 7, app: "Safari", title: "sdusteric.dev",
+                                                                       frame: .zero, displayID: 1)],
+                      shortcut: HotkeyCombo.defaultRecord.displayString, record: {}, cancel: {})
+                .padding(.top, 24)
+        case "countdown":
+            CountdownView(number: 2).frame(maxWidth: .infinity, maxHeight: .infinity)
+        case "permission":
+            ZStack {
+                Color.black.opacity(0.25)
+                PermissionWindowView(denied: false, allow: {}, openSettings: {})
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .shadow(color: .black.opacity(0.25), radius: 24, y: 8)
+            }
+        default:
+            EmptyView()
+        }
     }
 }
