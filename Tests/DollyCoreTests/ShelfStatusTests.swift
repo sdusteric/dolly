@@ -77,6 +77,16 @@ import UniformTypeIdentifiers
         #expect(!FileManager.default.fileExists(atPath: writer.posterFile.path(percentEncoded: false)))
     }
 
+    /// CONTRACT.md: titles are cut to 80 characters.
+    @Test func longTitleIsCutTo80() throws {
+        let writer = ShelfStatusWriter(directory: try folder(), appVersion: "0.1.0")
+        var long = latest
+        long.title = String(repeating: "a", count: 200)
+        try writer.write(latest: long, poster: nil, showInShelf: false)
+        let entry = try #require(try json(writer)["latest"] as? [String: Any])
+        #expect((entry["title"] as? String)?.count == 80)
+    }
+
     @Test func noLatestWritesCommonFieldsOnly() throws {
         let writer = ShelfStatusWriter(directory: try folder(), appVersion: "0.1.0")
         try writer.write(latest: nil, poster: nil, showInShelf: true)

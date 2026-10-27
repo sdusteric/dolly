@@ -50,6 +50,8 @@ public struct ShelfStatusWriter: Sendable {
     public static let fileName = "dolly.json"
     public static let previewFolderName = "dolly"
     public static let posterName = "poster.jpg"
+    /// CONTRACT.md: titles the owner sees in the app, cut to 80 characters.
+    public static let maxTitleLength = 80
 
     public let directory: URL
     public let appVersion: String
@@ -77,6 +79,8 @@ public struct ShelfStatusWriter: Sendable {
             removePoster()
         }
 
+        var latest = latest
+        if let title = latest?.title { latest?.title = String(title.prefix(Self.maxTitleLength)) }
         let document = ShelfStatusDocument(appVersion: appVersion, updatedAt: now, latest: latest, poster: posterPath)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
