@@ -4,8 +4,10 @@ import Foundation
 public enum CaptionPosition: String, Codable, Sendable, CaseIterable { case bottom, middle, top }
 
 /// Where the camera bubble and the caption sit on one output canvas. Both are drawn in canvas space,
-/// so neither zooms. Values are points at a 1080 px short side, scaled by `k`.
+/// so neither zooms. Their sizes are points on a phone: the clip's 1080 px short side fills a 400 pt
+/// wide screen, so a point is `k * phoneScale` pixels and a 15 pt caption reads as 15 pt there.
 public struct OverlayLayout: Sendable {
+    public static let phoneScale = 1080.0 / 400
     public static let marginFraction = 0.6
     public static let shrink = 0.6
     public static let border = 3.0
@@ -59,7 +61,7 @@ public struct OverlayLayout: Sendable {
     public func captionRect(width: Double) -> CGRect {
         let w = min(width, canvas.width - 2 * margin), h = captionHeight
         let x = (canvas.width - w) / 2
-        let gap = Self.captionGap * k
+        let gap = Self.captionGap * k * Self.phoneScale
         func clashes(_ y: Double) -> CGRect? {
             guard let b = bubble(at: 0) else { return nil }
             let box = CGRect(x: x, y: y, width: w, height: h)

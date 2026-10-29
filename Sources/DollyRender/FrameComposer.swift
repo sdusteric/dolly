@@ -130,14 +130,15 @@ public struct FrameComposer: Sendable {
 
     func captionArt(_ text: String) -> CIImage? {
         let margin = OverlayLayout.marginFraction * look.padding * k
-        return CaptionArt.image(text: text, sizePoints: captionSize, k: k, maxWidth: layout.canvas.width - 2 * max(margin, 16 * k))
+        return CaptionArt.image(text: text, sizePoints: captionSize, k: k * OverlayLayout.phoneScale,
+                                maxWidth: layout.canvas.width - 2 * max(margin, 16 * k))
     }
 
     /// The webcam aspect-filled into `rect` (canvas pixels, top-left), mirrored when asked, clipped
     /// to a circle or rounded square inside its white border.
     func bubble(_ frame: CIImage, track: CameraTrack, rect: CGRect) -> CIImage {
         let outer = ci(rect)
-        let border = track.border ? OverlayLayout.border * k : 0
+        let border = track.border ? OverlayLayout.border * k * OverlayLayout.phoneScale : 0
         let inner = outer.insetBy(dx: border, dy: border)
         func radius(_ r: CGRect) -> Float { Float(track.shape == .circle ? r.width / 2 : OverlayLayout.roundedRadius * r.width) }
 

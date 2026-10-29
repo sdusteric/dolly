@@ -88,7 +88,7 @@ enum ShotWorkspace {
         let clicks = editor.pointer?.clicks ?? []
         return EditorWorkspace(editor: editor,
                                stage: AnyView(StageView(editor: editor, image: still(editor, inputs), player: nil, isPlaying: false, clicks: clicks)),
-                               inspector: AnyView(InspectorView(editor: editor, clicks: clicks, useForNewTakes: { _ in })),
+                               inspector: AnyView(StudioInspector(editor: editor, clicks: clicks)),
                                timeline: AnyView(TimelineView(editor: editor, clickTimes: clicks.map(\.t),
                                                               filmstrip: inputs.footage.map { Image(decorative: $0, scale: 1) },
                                                               playback: nil, isPlaying: false)))
@@ -101,16 +101,17 @@ enum ShotWorkspace {
         return playStill(editor, footage)
     }
 
-    static func playStill(_ editor: EditorModel, _ footage: CGImage) -> CGImage? {
+    static func playStill(_ editor: EditorModel, _ footage: CGImage, shape: ShapePreset? = nil) -> CGImage? {
         let take = editor.take
-        let layout = ShapeLayout(shape: .wide16x9, recordingSize: take.size, padding: take.look.padding)
+        let layout = ShapeLayout(shape: shape ?? take.currentShape, recordingSize: take.size, padding: take.look.padding)
         let pointer = editor.pointer
         let path = CameraPath(zooms: take.zooms, layout: layout, pointer: pointer.map { p in { @Sendable t in p.position(at: t) } },
                               duration: take.duration)
         let t = editor.playhead
-        return StillRenderer.render(take: take, recording: footage, camera: path.camera(at: t),
+        return StillRenderer.render(take: take, shape: layout.shape, recording: footage, camera: path.camera(at: t),
                                     pointer: pointer?.position(at: t).map { ($0, pointer?.shape(at: t) ?? .arrow) },
-                                    ring: pointer?.ring(at: t).map { ($0.center, $0.progress) })
+                                    ring: pointer?.ring(at: t).map { ($0.center, $0.progress) },
+                                    cameraFrame: ShotScenarios.cameraFrame, at: t, depthProgress: path.depthProgress(at: t))
     }
 }
 

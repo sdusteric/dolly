@@ -91,6 +91,10 @@ nonisolated public enum Theme {
         public static let margin: CGFloat = 16
         public static let controlRadius: CGFloat = 6
         public static let controlHeight: CGFloat = 28
+        /// One choice in a segmented row (inspector tabs, shape bar, pickers).
+        public static let segment: CGFloat = 26
+        /// A backdrop swatch in the Look tab: six to a row in the 288 pt panel.
+        public static let swatch: CGFloat = 36
         public static let poster = CGSize(width: 56, height: 40)
         public static let windowMinimum = CGSize(width: 1100, height: 720)
         public static let focusRing: CGFloat = 2

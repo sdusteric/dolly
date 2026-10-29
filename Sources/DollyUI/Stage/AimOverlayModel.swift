@@ -3,7 +3,7 @@ import DollyCore
 import Foundation
 
 /// The geometry of Aim mode (spec 6.2): where a zoom's view sits on the stage and what a drag
-/// inside it or on a corner does. The stage shows the 16:9 canvas scaled to `stageSize`.
+/// inside it or on a corner does. The stage shows the take's shape scaled to `stageSize`.
 nonisolated public struct AimOverlayModel: Sendable {
     public enum Corner: CaseIterable, Sendable { case topLeft, topRight, bottomLeft, bottomRight }
 
@@ -17,7 +17,7 @@ nonisolated public struct AimOverlayModel: Sendable {
 
     public init(take: Take, clicks: [Click], stageSize: CGSize) {
         self.take = take
-        layout = ShapeLayout(shape: .wide16x9, recordingSize: take.size, padding: take.look.padding)
+        layout = ShapeLayout(shape: take.currentShape, recordingSize: take.size, padding: take.look.padding)
         self.stageSize = stageSize
         clickPoints = Dictionary(clicks.map { ($0.id, $0.point) }, uniquingKeysWith: { a, _ in a })
     }

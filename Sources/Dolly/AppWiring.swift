@@ -347,13 +347,19 @@ private struct LiveWorkspace: View {
     let filmstrip: Image?
     let useForNewTakes: (Look) -> Void
 
+    private var actions: StudioActions {
+        var actions = StudioActions()
+        actions.useForNewTakes = useForNewTakes
+        return actions
+    }
+
     var body: some View {
         let clicks = editor.pointer?.clicks ?? []
         EditorWorkspace(
             editor: editor,
             stage: AnyView(StageView(editor: editor, image: preview.aimImage, player: preview.player,
                                      isPlaying: preview.isPlaying, clicks: clicks)),
-            inspector: AnyView(InspectorView(editor: editor, clicks: clicks, useForNewTakes: useForNewTakes)),
+            inspector: AnyView(StudioInspector(editor: editor, clicks: clicks, actions: actions)),
             timeline: AnyView(TimelineView(editor: editor, clickTimes: clicks.map(\.t), filmstrip: filmstrip,
                                            playback: preview, isPlaying: preview.isPlaying))
         )
@@ -435,7 +441,7 @@ final class PreviewPlayer: PlaybackControlling {
             guard !Task.isCancelled, let self, let editor, let folder else { return }
             let take = editor.take
             do {
-                let built = try await PlayerItemFactory.composition(take: take, folder: folder, shape: .wide16x9, fps: 60,
+                let built = try await PlayerItemFactory.composition(take: take, folder: folder, shape: take.currentShape, fps: 60,
                                                                     pointer: editor.pointer)
                 guard !Task.isCancelled else { return }
                 install(AVPlayerItem(asset: built.asset), videoComposition: built.videoComposition, take: take)
@@ -522,7 +528,7 @@ final class PreviewPlayer: PlaybackControlling {
 
     private func renderAim() {
         guard let editor, let recordingFrame else { return }
-        aimImage = StillRenderer.render(take: editor.take, recording: recordingFrame, camera: nil, pointer: nil, ring: nil)
+        aimImage = StillRenderer.render(take: editor.take, folder: folder, recording: recordingFrame, camera: nil, pointer: nil, ring: nil)
     }
 
     /// The output at the playhead, for the export sheet's plate.

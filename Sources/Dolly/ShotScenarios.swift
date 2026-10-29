@@ -22,6 +22,43 @@ enum ShotScenarios {
         return Inputs(samples: samples, footage: footage)
     }
 
+    /// The webcam in shots: one solid warm color, standing in for a face.
+    static let cameraFrame: CGImage? = {
+        let ctx = CGContext(data: nil, width: 64, height: 36, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+                            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        ctx?.setFillColor(CGColor(srgbRed: 0.78, green: 0.62, blue: 0.48, alpha: 1))
+        ctx?.fill(CGRect(x: 0, y: 0, width: 64, height: 36))
+        return ctx?.makeImage()
+    }()
+
+    /// The studio mockups (docs/mockup/studio): shape, backdrop, playhead and what is selected.
+    static func studio(_ scenario: String, _ editor: EditorModel) {
+        editor.select(nil)
+        switch scenario {
+        case "studio-look":
+            editor.setShape(.portrait4x5)
+            editor.setBackdrop(.gradient(id: "rose"))
+            editor.playhead = 24.6
+        case "studio-zoom":
+            editor.setBackdrop(.gradient(id: "harbor"))
+            if editor.take.zooms.count > 1 { editor.select(editor.take.zooms[1].id) }
+            editor.playhead = 8.6
+        case "studio-camera":
+            editor.setBackdrop(.gradient(id: "slate"))
+            editor.playhead = 12.4
+            editor.selectCamera()
+        case "studio-captions":
+            editor.setShape(.tall9x16)
+            editor.setBackdrop(.gradient(id: "moss"))
+            editor.setCamera { $0.corner = .topLeft }
+            editor.playhead = 12.4
+            if let fourth = editor.take.captions?.items.dropFirst(3).first { editor.selectCaption(fourth.id) }
+        default:
+            break
+        }
+    }
+
     /// The take of the mockups: recorded today at 10:42, zoom 2 selected, playhead at 0:08.6.
     static func shelfEditor(_ inputs: Inputs) -> EditorModel {
         let geometry = RecordingGeometry(target: .window, recordingRect: .zero,
@@ -35,6 +72,10 @@ enum ShotScenarios {
         for (i, name) in ["Haul", "Run check up", "Update", "Capture area", "New episode"].enumerated() where i < take.zooms.count {
             take.zooms[i].name = name
         }
+        take.camera = CameraTrack(startOffset: 0)
+        take.camera?.hidden = [33.0...36.5]
+        take.captions = SyntheticTake.shelfCaptions()
+        take.microphoneOffset = 0
         let pointer = PointerPath(samples: inputs.samples, geometry: geometry, clicks: clicks, recordingStartHost: 0, look: take.look)
         let editor = EditorModel(take: take, pointer: pointer)
         if take.zooms.count > 1 { editor.select(take.zooms[1].id) }
@@ -63,6 +104,7 @@ enum ShotScenarios {
             return EditorScreenModel(entries: [], totalBytes: 0, editor: nil, recordShortcut: shortcut)
         }
         let editor = shelfEditor(inputs)
+        if scenario.hasPrefix("studio-") { studio(scenario, editor) }
         let model = EditorScreenModel(entries: sidebarEntries(editor.take), totalBytes: 1_900_000_000, editor: editor,
                                       recordShortcut: shortcut)
         if let footage = inputs.footage {
