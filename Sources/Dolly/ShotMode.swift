@@ -141,16 +141,27 @@ enum ShotOverlays {
                         .padding(.top, 52)
                 }
             }
-        case "record-bar":
+        case "record-bar", "record-bar-camera":
+            let camera = scenario == "record-bar-camera"
             var model = RecordBarModel()
             let _ = model.windowID = 7
+            let _ = model.camera = camera
+            let _ = model.microphone = camera
+            var devices = RecordBarDevices()
+            let _ = devices.cameras = [DeviceOption(id: "cam", name: "FaceTime HD Camera")]
+            let _ = devices.microphones = [DeviceOption(id: "mic", name: "MacBook Pro Microphone")]
             ZStack(alignment: .top) {
                 // The tape around the chosen window, here the editor's stage.
                 WindowHighlightView().frame(width: 1000, height: 600).padding(.top, 150)
-                RecordBar(model: .constant(model), windows: [PickableWindow(id: 7, app: "Safari", title: "sdusteric.dev",
-                                                                           frame: .zero, displayID: 1)],
-                          shortcut: HotkeyCombo.defaultRecord.displayString, record: {}, cancel: {})
-                    .padding(.top, 24)
+                VStack(spacing: -16) {
+                    RecordBar(model: .constant(model), windows: [PickableWindow(id: 7, app: "Safari", title: "sdusteric.dev",
+                                                                               frame: .zero, displayID: 1)],
+                              shortcut: HotkeyCombo.defaultRecord.displayString, devices: devices, record: {}, cancel: {})
+                    if camera, let frame = ShotScenarios.cameraFrame {
+                        CameraPreviewFrame { Image(decorative: frame, scale: 1).resizable().scaledToFill() }
+                    }
+                }
+                .padding(.top, 24)
             }
         case "take-card":
             ZStack(alignment: .bottomTrailing) {

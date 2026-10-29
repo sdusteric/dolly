@@ -1,5 +1,6 @@
 import AVFoundation
 import CoreGraphics
+import DollyCore
 import Foundation
 
 /// Screen Recording permission (Snap's design section 13). `preflight()` never prompts.
@@ -14,7 +15,7 @@ public enum PermissionProbe {
     @discardableResult
     public static func requestOnce() -> Bool { CGRequestScreenCaptureAccess() }
 
-    public enum Status: Sendable, Hashable { case allowed, denied, notAsked }
+    public typealias Status = DevicePermission
 
     public static let cameraSettingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera")
     public static let microphoneSettingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")

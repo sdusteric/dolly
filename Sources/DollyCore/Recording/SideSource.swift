@@ -1,5 +1,8 @@
 import Foundation
 
+/// Camera or microphone access as macOS reports it, read without prompting.
+public enum DevicePermission: Sendable, Hashable { case allowed, denied, notAsked }
+
 /// When a side device gave out mid-take: the host time of its last good sample, and why.
 public struct SideSourceFailure: Sendable, Hashable {
     public var hostTime: Double

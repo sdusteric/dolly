@@ -26,6 +26,11 @@ public struct Settings: Codable, Hashable, Sendable {
     /// Writes the Shelf poster (status/dolly/poster.jpg); off by default (app-updates CONTRACT.md).
     public var showInShelf = false
     public var advanced = Advanced()
+    /// The Record bar's Camera and Microphone switches and devices, remembered across launches.
+    public var recordCamera = false
+    public var recordMicrophone = false
+    public var cameraID: String?
+    public var microphoneID: String?
 
     public init() {}
 
@@ -37,5 +42,9 @@ public struct Settings: Codable, Hashable, Sendable {
         exportFPS = try c.decodeIfPresent(Int.self, forKey: .exportFPS) ?? 60
         showInShelf = try c.decodeIfPresent(Bool.self, forKey: .showInShelf) ?? false
         advanced = try c.decodeIfPresent(Advanced.self, forKey: .advanced) ?? Advanced()
+        recordCamera = try c.decodeIfPresent(Bool.self, forKey: .recordCamera) ?? false
+        recordMicrophone = try c.decodeIfPresent(Bool.self, forKey: .recordMicrophone) ?? false
+        cameraID = try c.decodeIfPresent(String.self, forKey: .cameraID)
+        microphoneID = try c.decodeIfPresent(String.self, forKey: .microphoneID)
     }
 }

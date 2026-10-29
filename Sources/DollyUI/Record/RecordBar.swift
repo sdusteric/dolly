@@ -1,21 +1,43 @@
 import DollyCore
 import SwiftUI
 
-/// The Record bar (spec 4.1): pick Window, Area or Display, then Record. A floating panel near the
-/// top of the screen; Esc cancels. Excluded from every recording.
+/// A camera or microphone for the Record bar's device menus.
+nonisolated public struct DeviceOption: Hashable, Identifiable, Sendable {
+    public let id: String
+    public let name: String
+    public init(id: String, name: String) {
+        self.id = id
+        self.name = name
+    }
+}
+
+/// The devices the bar offers and what its switches do (the app checks permission first).
+public struct RecordBarDevices {
+    public var cameras: [DeviceOption] = []
+    public var microphones: [DeviceOption] = []
+    public var toggleCamera: () -> Void = {}
+    public var toggleMicrophone: () -> Void = {}
+    public init() {}
+}
+
+/// The Record bar (spec 4.1, studio spec Camera): pick Window, Area or Display, the Camera and
+/// Microphone switches, then Record. A floating panel near the top of the screen; Esc cancels.
+/// Excluded from every recording.
 public struct RecordBar: View {
     @Binding var model: RecordBarModel
     let windows: [PickableWindow]
     let shortcut: String
+    let devices: RecordBarDevices
     let record: () -> Void
     let cancel: () -> Void
     @Environment(\.dollyShot) private var shot
 
-    public init(model: Binding<RecordBarModel>, windows: [PickableWindow], shortcut: String,
+    public init(model: Binding<RecordBarModel>, windows: [PickableWindow], shortcut: String, devices: RecordBarDevices = RecordBarDevices(),
                 record: @escaping () -> Void, cancel: @escaping () -> Void) {
         _model = model
         self.windows = windows
         self.shortcut = shortcut
+        self.devices = devices
         self.record = record
         self.cancel = cancel
     }
@@ -41,6 +63,11 @@ public struct RecordBar: View {
 
             if model.target == .window { windowPicker.frame(width: 260) }
 
+            deviceSwitch("Camera", symbol: "video", on: model.camera, options: devices.cameras, selected: model.cameraID,
+                         toggle: devices.toggleCamera) { model.cameraID = $0 }
+            deviceSwitch("Microphone", symbol: "mic", on: model.microphone, options: devices.microphones, selected: model.microphoneID,
+                         toggle: devices.toggleMicrophone) { model.microphoneID = $0 }
+
             Button(action: record) {
                 HStack(spacing: 6) { RecordDot(); Text("Record"); ShortcutHint(text: shortcut) }
             }
@@ -60,6 +87,54 @@ public struct RecordBar: View {
         // the bar casts it, not every button inside.
         .compositingGroup()
         .shadow(color: .black.opacity(0.18), radius: 16, y: 6)
+    }
+
+    /// A switch that reads as one: the device's name in ink with a filled symbol when on, muted with
+    /// a slashed one when off, and a menu of devices beside it.
+    private func deviceSwitch(_ name: String, symbol: String, on: Bool, options: [DeviceOption], selected: String?,
+                              toggle: @escaping () -> Void, choose: @escaping (String) -> Void) -> some View {
+        HStack(spacing: 0) {
+            Button(action: toggle) {
+                HStack(spacing: 5) {
+                    Image(systemName: on ? "\(symbol).fill" : "\(symbol).slash").frame(width: 16)
+                    Text(name)
+                }
+                .font(Theme.Font.bodyMedium)
+                .foregroundStyle(on ? Theme.ink.color : Theme.muted.color)
+                .padding(.leading, 10)
+                .padding(.trailing, 4)
+                .frame(height: 26)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(name)
+            .accessibilityValue(on ? "On" : "Off")
+            deviceMenu(name, options: options, selected: selected, choose: choose)
+        }
+        .padding(2)
+        .background(RoundedRectangle(cornerRadius: 7).fill(on ? Theme.sheet.color : Theme.active.color))
+        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(on ? Theme.control.color : .clear, lineWidth: 1))
+    }
+
+    @ViewBuilder
+    private func deviceMenu(_ name: String, options: [DeviceOption], selected: String?, choose: @escaping (String) -> Void) -> some View {
+        let chevron = Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(Theme.muted.color)
+        if shot || options.isEmpty {
+            chevron.frame(width: 18, height: 26).opacity(options.isEmpty && !shot ? 0 : 1)
+        } else {
+            Menu {
+                Picker(name, selection: Binding(get: { selected ?? options[0].id }, set: choose)) {
+                    ForEach(options) { Text($0.name).tag($0.id) }
+                }
+                .pickerStyle(.inline)
+                .labelsHidden()
+            } label: { chevron }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .frame(width: 18, height: 26)
+                .accessibilityLabel("\(name) device")
+        }
     }
 
     @ViewBuilder private var windowPicker: some View {
@@ -122,11 +197,14 @@ public struct StatusTimerView: View {
 /// First Record without Screen Recording (Snap's first-run pattern): why, one button that asks
 /// macOS, and a hint with the settings link if it stays denied.
 public struct PermissionWindowView: View {
+    let copy: PermissionWindowModel.Copy
     let denied: Bool
     let allow: () -> Void
     let openSettings: () -> Void
 
-    public init(denied: Bool, allow: @escaping () -> Void, openSettings: @escaping () -> Void) {
+    public init(copy: PermissionWindowModel.Copy = PermissionWindowModel.screen, denied: Bool, allow: @escaping () -> Void,
+                openSettings: @escaping () -> Void) {
+        self.copy = copy
         self.denied = denied
         self.allow = allow
         self.openSettings = openSettings
@@ -134,16 +212,16 @@ public struct PermissionWindowView: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(PermissionWindowModel.title).font(Theme.Font.display(18)).accessibilityAddTraits(.isHeader)
-            Text(PermissionWindowModel.message).font(.system(size: 14)).fixedSize(horizontal: false, vertical: true)
+            Text(copy.title).font(Theme.Font.display(18)).accessibilityAddTraits(.isHeader)
+            Text(copy.message).font(.system(size: 14)).fixedSize(horizontal: false, vertical: true)
             if denied {
-                Text(PermissionWindowModel.deniedHint).font(Theme.Font.body).foregroundStyle(Theme.muted.color)
+                Text(copy.deniedHint).font(Theme.Font.body).foregroundStyle(Theme.muted.color)
                     .fixedSize(horizontal: false, vertical: true)
             }
             HStack {
                 Spacer()
                 Button(PermissionWindowModel.openSettings, action: openSettings).buttonStyle(DollyButtonStyle())
-                Button(PermissionWindowModel.allow, action: allow).buttonStyle(DollyButtonStyle(kind: .primary))
+                Button(copy.allow, action: allow).buttonStyle(DollyButtonStyle(kind: .primary))
             }
         }
         .foregroundStyle(Theme.ink.color)

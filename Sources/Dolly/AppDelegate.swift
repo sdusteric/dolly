@@ -32,6 +32,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         let recording = RecordingWiring(paths: paths, settings: settings)
         editor.onRecord = { [weak recording] in recording?.hotkeyPressed() }
         recording.onTake = { [weak editor] take in editor?.received(take) }
+        recording.onDevices = { [weak editor, weak recording] bar in
+            guard let editor else { return }
+            editor.setRecordDevices(bar)
+            recording?.apply(editor.settings)
+        }
         editor.onReceived = { [weak self, weak editor] take, poster in
             let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }
             self?.takeCard.show(TakeCardModel(take: take), poster: poster, on: screen,

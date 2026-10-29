@@ -222,6 +222,12 @@ final class EditorController: NSObject, NSWindowDelegate {
     }
 
     /// The clips folder from Settings; the export sheet's Change… sets the same value.
+    /// The Record bar's switches and devices, remembered for the next time it opens.
+    func setRecordDevices(_ bar: RecordBarModel) {
+        bar.store(in: &settings)
+        saveSettings()
+    }
+
     func setExportsFolder(_ path: String) {
         settings.exportsFolder = path
         saveSettings()

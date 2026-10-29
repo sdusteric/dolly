@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 import Testing
 @testable import DollyCore
 @testable import DollyUI
@@ -59,6 +60,60 @@ import Testing
         #expect(m.windowID == 5)
         m.prepare(windows: [], frontmostPID: 20)
         #expect(m.windowID == nil)
+    }
+
+    @Test func switchesStartOff() {
+        let m = RecordBarModel()
+        #expect(!m.camera && !m.microphone && m.cameraID == nil && m.microphoneID == nil)
+    }
+
+    @Test func turningCameraOnAsksOnce() {
+        var m = RecordBarModel()
+        #expect(m.permissionStep(camera: .notAsked, microphone: .notAsked) == nil)   // both off
+        m.camera = true
+        #expect(m.permissionStep(camera: .notAsked, microphone: .denied) == .askCamera)
+        #expect(m.permissionStep(camera: .allowed, microphone: .denied) == nil)
+        #expect(m.permissionStep(camera: .denied, microphone: .allowed) == .cameraDenied)
+        m.microphone = true
+        #expect(m.permissionStep(camera: .allowed, microphone: .notAsked) == .askMicrophone)
+        #expect(m.permissionStep(camera: .allowed, microphone: .denied) == .microphoneDenied)
+    }
+
+    @Test func planCarriesDeviceIDs() throws {
+        var plan = try RecordingPlan.make(target: .display, displayID: 1, windowID: nil,
+                                          globalRect: CGRect(x: 0, y: 0, width: 640, height: 400), scale: 1)
+        var m = RecordBarModel()
+        m.camera = true
+        m.cameraID = "cam-1"
+        m.microphoneID = "mic-1"
+        m.apply(to: &plan)
+        #expect(plan.cameraID == "cam-1" && plan.microphoneID == nil)
+        m.camera = false
+        m.apply(to: &plan)
+        #expect(plan.cameraID == nil)
+    }
+
+    @Test func barRemembersTheSwitches() throws {
+        var settings = DollyCore.Settings()
+        #expect(!settings.recordCamera && !settings.recordMicrophone)
+        var m = RecordBarModel()
+        m.camera = true
+        m.microphone = true
+        m.cameraID = "cam-1"
+        m.store(in: &settings)
+        let back = try JSONDecoder().decode(DollyCore.Settings.self, from: JSONEncoder().encode(settings))
+        var n = RecordBarModel()
+        n.load(from: back)
+        #expect(n.camera && n.microphone && n.cameraID == "cam-1" && n.microphoneID == nil)
+        let old = try JSONDecoder().decode(DollyCore.Settings.self, from: Data("{}".utf8))
+        #expect(!old.recordCamera)
+    }
+
+    @Test func devicePermissionCopy() {
+        #expect(PermissionWindowModel.camera.message
+            == "Dolly needs Camera to record your camera. It never opens the camera unless the Camera switch is on.")
+        #expect(PermissionWindowModel.microphone.message
+            == "Dolly needs Microphone to record your voice. It never opens the microphone unless the Microphone switch is on.")
     }
 
     @Test func permissionCopy() {

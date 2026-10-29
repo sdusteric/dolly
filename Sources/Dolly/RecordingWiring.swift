@@ -11,12 +11,18 @@ import SwiftUI
 final class RecordingWiring {
     private(set) var controller: RecordingController
     var onTake: (Take) -> Void = { _ in }
+    /// The Camera and Microphone switches changed; the app remembers them in the settings.
+    var onDevices: (RecordBarModel) -> Void = { _ in }
 
     private let paths: DollyPaths
     private var settings: DollyCore.Settings
     private let shortcut: String
     private let areaPicker = AreaPicker()
     private let highlight = WindowHighlight()
+    private let cameraPreview = CameraPreview()
+    private let previewPanel = CameraPreviewPanel()
+    /// The camera the preview has open, so redrawing the bar does not reopen it.
+    private var previewing: String?
     private var barPanel: KeyablePanel?
     private var sleepObserver: NSObjectProtocol?
     /// The Advanced switches the current controller was built with.
@@ -47,7 +53,8 @@ final class RecordingWiring {
         RecordingController(
             store: TakeStore(paths: paths), source: LiveRecordingSource(),
             pointer: PointerSampler(clickSource: settings.advanced.clickSource, pointerShapes: settings.advanced.pointerShapes),
-            clock: HostClock(), disk: LiveDiskSpace(), rules: ZoomRules(), namer: ZoomNamer()
+            clock: HostClock(), disk: LiveDiskSpace(), rules: ZoomRules(), namer: ZoomNamer(),
+            camera: LiveCameraSource(), microphone: LiveMicrophoneSource()
         )
     }
 
@@ -109,6 +116,10 @@ final class RecordingWiring {
         Task {
             windows = await WindowCatalog.windows()
             bar.prepare(windows: windows, frontmostPID: frontmost)
+            bar.load(from: settings)
+            // A switch left on whose permission was since taken away starts off.
+            if bar.camera, PermissionProbe.camera() != .allowed { bar.camera = false }
+            if bar.microphone, PermissionProbe.microphone() != .allowed { bar.microphone = false }
             showBar()
         }
     }
@@ -118,8 +129,18 @@ final class RecordingWiring {
     private func showBar() {
         barPanel?.orderOut(nil)
         highlight.show(bar.target == .window ? windows.first { $0.id == bar.windowID }?.frame : nil)
-        let binding = Binding(get: { self.bar }, set: { self.bar = $0; self.showBar() })
-        let view = RecordBar(model: binding, windows: windows, shortcut: shortcut,
+        let binding = Binding(get: { self.bar }, set: { next in
+            let devicesChanged = next.cameraID != self.bar.cameraID || next.microphoneID != self.bar.microphoneID
+            self.bar = next
+            if devicesChanged { self.onDevices(next) }
+            self.showBar()
+        })
+        var devices = RecordBarDevices()
+        devices.cameras = CaptureDevices.cameras().map { DeviceOption(id: $0.id, name: $0.name) }
+        devices.microphones = CaptureDevices.microphones().map { DeviceOption(id: $0.id, name: $0.name) }
+        devices.toggleCamera = { [weak self] in self?.toggle(camera: true) }
+        devices.toggleMicrophone = { [weak self] in self?.toggle(camera: false) }
+        let view = RecordBar(model: binding, windows: windows, shortcut: shortcut, devices: devices,
                              record: { [weak self] in self?.record() }, cancel: { [weak self] in self?.closeBar() })
         let host = NSHostingView(rootView: view)
         let size = host.fittingSize
@@ -134,9 +155,71 @@ final class RecordingWiring {
         panel.becomesKeyOnlyIfNeeded = false
         panel.makeKeyAndOrderFront(nil)
         barPanel = panel
+        updatePreview()
+    }
+
+    /// The preview shows while the Camera switch is on and the bar is open; nothing opens the
+    /// camera otherwise.
+    private func updatePreview() {
+        guard let barPanel, bar.camera, PermissionProbe.camera() == .allowed else {
+            previewPanel.hide()
+            cameraPreview.stop()
+            previewing = nil
+            return
+        }
+        let device = bar.cameraID ?? ""
+        if previewing != device {
+            guard let view = cameraPreview.start(deviceID: device) else { return previewPanel.hide() }
+            previewing = device
+            previewPanel.show(view, below: barPanel.frame)
+        }
+    }
+
+    /// A switch turns on only once macOS allows the device; the first time, Dolly says why first.
+    private func toggle(camera: Bool) {
+        if camera ? bar.camera : bar.microphone {
+            if camera { bar.camera = false } else { bar.microphone = false }
+            onDevices(bar)
+            return showBar()
+        }
+        var wanted = bar
+        if camera { wanted.camera = true } else { wanted.microphone = true }
+        switch wanted.permissionStep(camera: PermissionProbe.camera(), microphone: PermissionProbe.microphone()) {
+        case .askCamera, .askMicrophone: showDevicePermission(camera: camera, denied: false)
+        case .cameraDenied, .microphoneDenied: showDevicePermission(camera: camera, denied: true)
+        case nil:
+            bar = wanted
+            onDevices(bar)
+            showBar()
+        }
+    }
+
+    private func showDevicePermission(camera: Bool, denied: Bool) {
+        let copy = camera ? PermissionWindowModel.camera : PermissionWindowModel.microphone
+        let settingsURL = camera ? PermissionProbe.cameraSettingsURL : PermissionProbe.microphoneSettingsURL
+        let view = PermissionWindowView(copy: copy, denied: denied, allow: { [weak self] in
+            Task { @MainActor in
+                let granted = camera ? await PermissionProbe.requestCamera() : await PermissionProbe.requestMicrophone()
+                guard let self else { return }
+                if granted {
+                    self.permissionWindow?.close()
+                    if camera { self.bar.camera = true } else { self.bar.microphone = true }
+                    self.onDevices(self.bar)
+                    if self.barPanel != nil { self.showBar() }
+                } else {
+                    self.showDevicePermission(camera: camera, denied: true)
+                }
+            }
+        }, openSettings: {
+            if let settingsURL { NSWorkspace.shared.open(settingsURL) }
+        })
+        present(view, title: copy.title)
     }
 
     private func closeBar() {
+        previewPanel.hide()
+        cameraPreview.stop()
+        previewing = nil
         highlight.hide()
         barPanel?.orderOut(nil)
         barPanel = nil
@@ -167,10 +250,11 @@ final class RecordingWiring {
         case .idle, .failed: break
         default: return
         }
-        guard let plan = try? RecordingPlan.make(target: target, displayID: displayID, windowID: windowID, globalRect: rect, scale: scale) else {
+        guard var plan = try? RecordingPlan.make(target: target, displayID: displayID, windowID: windowID, globalRect: rect, scale: scale) else {
             NSSound.beep()
             return
         }
+        bar.apply(to: &plan)
         showCountdown(over: rect)
         Task {
             await controller.start(plan: plan)
@@ -286,8 +370,12 @@ final class RecordingWiring {
         let view = PermissionWindowView(denied: denied, allow: { PermissionProbe.requestOnce() }, openSettings: {
             if let url = PermissionProbe.screenRecordingSettingsURL { NSWorkspace.shared.open(url) }
         })
+        present(view, title: PermissionWindowModel.title)
+    }
+
+    private func present(_ view: PermissionWindowView, title: String) {
         let window = permissionWindow ?? NSWindow(contentRect: .zero, styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        window.title = PermissionWindowModel.title
+        window.title = title
         window.contentView = NSHostingView(rootView: view)
         window.setContentSize(window.contentView?.fittingSize ?? CGSize(width: 440, height: 200))
         window.center()

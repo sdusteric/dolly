@@ -47,7 +47,9 @@ final class CaptureRecorder: NSObject, AVCaptureVideoDataOutputSampleBufferDeleg
     private func withState<T>(_ body: (inout State) -> T) -> T { lock.withLock { body(&state) } }
 
     func start(deviceID: String, url: URL, failed: @escaping @Sendable (SideSourceFailure) -> Void) async throws -> Double {
-        guard let device = AVCaptureDevice(uniqueID: deviceID) else { throw RecordingSourceError.couldNotStart("no device") }
+        // An empty ID is the system's default device.
+        let device = deviceID.isEmpty ? AVCaptureDevice.default(for: kind == .camera ? .video : .audio) : AVCaptureDevice(uniqueID: deviceID)
+        guard let device else { throw RecordingSourceError.couldNotStart("no device") }
         let session = AVCaptureSession()
         session.beginConfiguration()
         let deviceInput = try AVCaptureDeviceInput(device: device)
