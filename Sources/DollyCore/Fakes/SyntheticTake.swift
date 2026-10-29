@@ -16,6 +16,20 @@ public enum SyntheticTake {
         )
     }
 
+    /// The ten captions of the studio mockups, as if transcribed from the Shelf demo's voice.
+    public static func shelfCaptions() -> CaptionTrack {
+        let lines: [(Double, Double, String)] = [
+            (0.4, 3.8, "This is Shelf, my launcher for every app."), (4.2, 7.2, "Haul shows what is downloading."),
+            (7.6, 11.0, "Run check up tells Tidy to scan again."), (11.4, 14.6, "Each tile has its own quick actions."),
+            (15.0, 20.8, "Updates install right from the board."), (21.2, 26.6, "Reel picks up where I left off."),
+            (27.0, 31.8, "Snap keeps my last three captures."), (32.2, 37.6, "Booth knows which episode is next."),
+            (38.0, 44.2, "Press a number to jump to any app."), (44.6, 47.8, "That is the whole board."),
+        ]
+        return CaptionTrack(source: .voice, locale: "en_US", items: lines.enumerated().map { i, l in
+            Caption(id: UUID(uuidString: String(format: "00000000-0000-4000-8000-%012d", i + 1)) ?? UUID(), start: l.0, end: l.1, text: l.2)
+        })
+    }
+
     /// The nine left clicks of the Shelf demo, in recording points (plan Task 3).
     public static let shelfDemoClicks: [(t: Double, x: Double, y: Double)] = [
         (2.4, 360, 225), (7.9, 636, 318), (15.2, 605, 280), (17.0, 560, 300), (19.8, 600, 283),

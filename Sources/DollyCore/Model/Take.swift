@@ -51,6 +51,8 @@ public struct Take: Codable, Hashable, Identifiable, Sendable {
     /// The webcam, when one was recorded.
     public var camera: CameraTrack?
 
+    public var captions: CaptionTrack?
+
     public var currentShape: ShapePreset { shape ?? .wide16x9 }
 
     public init(
