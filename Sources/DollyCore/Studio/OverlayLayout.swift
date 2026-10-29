@@ -10,6 +10,8 @@ public struct OverlayLayout: Sendable {
     public static let shrink = 0.6
     public static let border = 3.0
     public static let captionGap = 10.0
+    /// Corner radius of the Rounded bubble, as a fraction of its side.
+    public static let roundedRadius = 0.18
 
     public let canvas: CGSize
     public let recordingRect: CGRect

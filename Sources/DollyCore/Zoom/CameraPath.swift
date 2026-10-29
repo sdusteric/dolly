@@ -29,6 +29,12 @@ public struct CameraPath: Sendable {
 
     public func camera(at t: Double) -> CameraState { evaluate(t, upTo: zooms.count) }
 
+    /// 0 at rest, 1 at the active zoom's full depth: how far the webcam bubble has shrunk.
+    public func depthProgress(at t: Double) -> Double {
+        guard let z = zooms.last(where: { $0.start <= t && t < $0.end }), z.depth > 1 else { return 0 }
+        return min(max((camera(at: t).depth - 1) / (z.depth - 1), 0), 1)
+    }
+
     private func evaluate(_ t: Double, upTo n: Int) -> CameraState {
         guard let i = zooms.indices.prefix(n).last(where: { zooms[$0].start <= t && t < zooms[$0].end }) else {
             return layout.rest

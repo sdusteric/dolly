@@ -17,16 +17,22 @@ final class DollyInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
     let pointer: PointerPath?
     /// Composition time 0 is this many seconds into the recording (the trim's start).
     let recordingOffset: Double
+    /// The webcam's track in the composition, and how to draw it.
+    let webcam: (trackID: CMPersistentTrackID, track: CameraTrack)?
+    let captions: CaptionTrack?
 
     init(timeRange: CMTimeRange, trackID: CMPersistentTrackID, composer: FrameComposer, camera: CameraPath,
-         pointer: PointerPath?, recordingOffset: Double) {
+         pointer: PointerPath?, recordingOffset: Double, webcam: (trackID: CMPersistentTrackID, track: CameraTrack)? = nil,
+         captions: CaptionTrack? = nil) {
         self.timeRange = timeRange
         self.trackID = trackID
-        requiredSourceTrackIDs = [NSNumber(value: trackID)]
+        requiredSourceTrackIDs = [trackID, webcam?.trackID].compactMap { $0 }.map { NSNumber(value: $0) }
         self.composer = composer
         self.camera = camera
         self.pointer = pointer
         self.recordingOffset = recordingOffset
+        self.webcam = webcam
+        self.captions = captions
     }
 }
 
@@ -61,17 +67,29 @@ final class DollyCompositor: NSObject, AVVideoCompositing, @unchecked Sendable {
         }
         let t = request.compositionTime.seconds + instruction.recordingOffset
         let pointer = instruction.pointer
-        // Both buffers are only valid inside their closures, so the render happens in there.
+        let webcam = instruction.webcam.flatMap { $0.track.isVisible(at: t) ? $0 : nil }
+        let webcamBuffer = webcam.flatMap { request.sourceReadOnlyPixelBuffer(byTrackID: $0.trackID) }
+        let caption = instruction.captions?.caption(at: t)?.text
+        // Every buffer is only valid inside its closure, so the render happens in there.
+        let bounds = CGRect(origin: .zero, size: instruction.composer.layout.canvas)
         source.withUnsafeBuffer { sourceBuffer in
-            let frame = instruction.composer.compose(
-                recording: CIImage(cvPixelBuffer: sourceBuffer),
-                camera: instruction.camera.camera(at: t),
-                pointer: pointer?.position(at: t).map { ($0, pointer?.shape(at: t) ?? .arrow) },
-                ring: pointer?.ring(at: t)
-            )
-            output.withUnsafeBuffer { outputBuffer in
-                Self.context.render(frame, to: outputBuffer, bounds: CGRect(origin: .zero, size: instruction.composer.layout.canvas),
-                                    colorSpace: Self.outputSpace)
+            let recording = CIImage(cvPixelBuffer: sourceBuffer)
+            let frame = { (cameraFrame: CIImage?) in
+                instruction.composer.compose(
+                    recording: recording, camera: instruction.camera.camera(at: t),
+                    pointer: pointer?.position(at: t).map { ($0, pointer?.shape(at: t) ?? .arrow) },
+                    ring: pointer?.ring(at: t), cameraFrame: cameraFrame,
+                    cameraState: webcam.map { ($0.track, instruction.camera.depthProgress(at: t)) }, caption: caption
+                )
+            }
+            if let webcamBuffer {
+                webcamBuffer.withUnsafeBuffer { cameraBuffer in
+                    let image = frame(CIImage(cvPixelBuffer: cameraBuffer))
+                    output.withUnsafeBuffer { Self.context.render(image, to: $0, bounds: bounds, colorSpace: Self.outputSpace) }
+                }
+            } else {
+                let image = frame(nil)
+                output.withUnsafeBuffer { Self.context.render(image, to: $0, bounds: bounds, colorSpace: Self.outputSpace) }
             }
         }
         request.finish(withComposedPixelBuffer: CVReadOnlyPixelBuffer(output))

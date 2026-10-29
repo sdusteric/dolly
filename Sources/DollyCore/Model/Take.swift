@@ -52,6 +52,8 @@ public struct Take: Codable, Hashable, Identifiable, Sendable {
     public var camera: CameraTrack?
 
     public var captions: CaptionTrack?
+    /// `audio.m4a` time 0 is this many seconds into the take; nil when no microphone was recorded.
+    public var microphoneOffset: Double?
 
     public var currentShape: ShapePreset { shape ?? .wide16x9 }
 

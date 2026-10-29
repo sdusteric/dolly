@@ -18,6 +18,7 @@ public final class TakeStore: Sendable {
     public static let windowName = "window.bin"
     public static let jsonName = "take.json"
     public static let posterName = "poster.jpg"
+    public static let audioName = "audio.m4a"
     public static let brokenReason = "Can't open this take"
 
     public let paths: DollyPaths

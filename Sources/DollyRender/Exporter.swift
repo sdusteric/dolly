@@ -24,6 +24,14 @@ public final class Exporter: ExportRunning {
         output.videoComposition = composition
         guard reader.canAdd(output) else { throw CocoaError(.featureUnsupported) }
         let provider = reader.outputProvider(for: output)
+        let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+        var audioOutput: AVAssetReaderAudioMixOutput?
+        if !audioTracks.isEmpty {
+            let mix = AVAssetReaderAudioMixOutput(audioTracks: audioTracks, audioSettings: [AVFormatIDKey: kAudioFormatLinearPCM])
+            guard reader.canAdd(mix) else { throw CocoaError(.featureUnsupported) }
+            audioOutput = mix
+        }
+        let audioProvider = audioOutput.map { reader.outputProvider(for: $0) }
 
         // AVFoundation leaves its own scratch files beside the output while it moves the moov box
         // first, so the export happens in a hidden folder of its own that is removed afterwards.
@@ -48,6 +56,14 @@ public final class Exporter: ExportRunning {
         ])
         guard writer.canAdd(input) else { throw CocoaError(.featureUnsupported) }
         let receiver = writer.inputReceiver(for: input)
+        var audioReceiver: AVAssetWriterInput.SampleBufferReceiver?
+        if audioProvider != nil {
+            let audioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: [
+                AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 48_000, AVNumberOfChannelsKey: 2, AVEncoderBitRateKey: 160_000,
+            ])
+            guard writer.canAdd(audioInput) else { throw CocoaError(.featureUnsupported) }
+            audioReceiver = writer.inputReceiver(for: audioInput)
+        }
 
         func discard() {
             writer.cancelWriting()
@@ -58,19 +74,38 @@ public final class Exporter: ExportRunning {
             try writer.start()
             writer.startSession(atSourceTime: .zero)
             let expected = max(duration * Double(plan.fps), 1)
+            // Video and audio are read in step, whichever is behind first: the reader stalls when one
+            // output runs far ahead of the other.
             var frames = 0.0
             var reported = -1.0
-            while let sample = try await provider.next() {
+            var videoAt = -Double.infinity, audioAt = -Double.infinity
+            var videoDone = false, audioDone = audioProvider == nil
+            while !videoDone || !audioDone {
                 try Task.checkCancellation()
-                _ = try await WriterInputAppend.untilAccepted { try receiver.appendImmediately(sample) }
-                frames += Double(sample.sampleCount)
-                let fraction = min(frames / expected, 0.99)
-                if fraction - reported >= 0.05 {
-                    progress(fraction)
-                    reported = fraction
+                if !videoDone && (audioDone || videoAt <= audioAt) {
+                    guard let sample = try await provider.next() else {
+                        receiver.finish()
+                        videoDone = true
+                        continue
+                    }
+                    videoAt = sample.presentationTimeStamp.seconds
+                    _ = try await WriterInputAppend.untilAccepted { try receiver.appendImmediately(sample) }
+                    frames += Double(sample.sampleCount)
+                    let fraction = min(frames / expected, 0.99)
+                    if fraction - reported >= 0.05 {
+                        progress(fraction)
+                        reported = fraction
+                    }
+                } else if let audioProvider, let audioReceiver {
+                    guard let sample = try await audioProvider.next() else {
+                        audioReceiver.finish()
+                        audioDone = true
+                        continue
+                    }
+                    audioAt = sample.presentationTimeStamp.seconds
+                    _ = try await WriterInputAppend.untilAccepted { try audioReceiver.appendImmediately(sample) }
                 }
             }
-            receiver.finish()
             await writer.finishWriting()
             guard writer.status == .completed else { throw writer.error ?? CocoaError(.fileWriteUnknown) }
         } catch {

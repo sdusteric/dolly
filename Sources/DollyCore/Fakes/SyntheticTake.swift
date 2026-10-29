@@ -127,3 +127,58 @@ extension SyntheticTake {
         ctx.fill(CGRect(x: squareX, y: size.height / 2 - 20, width: 40, height: 40))
     }
 }
+
+extension SyntheticTake {
+    /// A 1280 x 720 H.264 movie of one solid color at 30 fps, standing in for `camera.mov`.
+    public static func writeCamera(to url: URL, seconds: Double, color: (UInt8, UInt8, UInt8)) async throws {
+        if FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) { try FileManager.default.removeItem(at: url) }
+        let width = 1280, height = 720, fps = 30
+        let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
+        let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
+            AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: width, AVVideoHeightKey: height,
+        ])
+        guard writer.canAdd(input) else { throw CocoaError(.fileWriteUnknown) }
+        let video = writer.inputPixelBufferReceiver(for: input, pixelBufferAttributes: CVPixelBufferCreationAttributes(
+            pixelFormatType: CVPixelFormatType(rawValue: kCVPixelFormatType_32BGRA), size: CVImageSize(width: width, height: height)
+        ))
+        try writer.start()
+        writer.startSession(atSourceTime: .zero)
+        for i in 0..<Int(seconds * Double(fps)) {
+            guard let pool = video.pixelBufferPool else { throw CocoaError(.fileWriteUnknown) }
+            let buffer = try pool.makeMutablePixelBuffer()
+            buffer.withUnsafeBuffer { pixel in
+                CVPixelBufferLockBaseAddress(pixel, [])
+                defer { CVPixelBufferUnlockBaseAddress(pixel, []) }
+                guard let base = CVPixelBufferGetBaseAddress(pixel)?.assumingMemoryBound(to: UInt8.self) else { return }
+                let row = CVPixelBufferGetBytesPerRow(pixel)
+                for y in 0..<height {
+                    for x in 0..<width {
+                        let o = y * row + x * 4
+                        base[o] = color.2; base[o + 1] = color.1; base[o + 2] = color.0; base[o + 3] = 255
+                    }
+                }
+            }
+            let frame = CVReadOnlyPixelBuffer(buffer)
+            let time = CMTime(value: CMTimeValue(i), timescale: CMTimeScale(fps))
+            _ = try await WriterInputAppend.untilAccepted { try video.appendImmediately(frame, with: time) }
+        }
+        video.finish()
+        await writer.finishWriting()
+        if writer.status != .completed { throw writer.error ?? CocoaError(.fileWriteUnknown) }
+    }
+
+    /// A 440 Hz tone as AAC 48 kHz mono, standing in for `audio.m4a`.
+    public static func writeTone(to url: URL, seconds: Double) throws {
+        if FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) { try FileManager.default.removeItem(at: url) }
+        let rate = 48_000.0
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: rate, channels: 1),
+              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(seconds * rate)),
+              let samples = buffer.floatChannelData?[0] else { throw CocoaError(.fileWriteUnknown) }
+        buffer.frameLength = buffer.frameCapacity
+        for i in 0..<Int(buffer.frameLength) { samples[i] = Float(0.25 * sin(2 * .pi * 440 * Double(i) / rate)) }
+        let file = try AVAudioFile(forWriting: url, settings: [
+            AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: rate, AVNumberOfChannelsKey: 1, AVEncoderBitRateKey: 96_000,
+        ])
+        try file.write(from: buffer)
+    }
+}
