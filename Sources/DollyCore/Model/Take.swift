@@ -48,6 +48,9 @@ public struct Take: Codable, Hashable, Identifiable, Sendable {
     /// The shape the stage last showed; nil (every M1 take) reads as 16:9.
     public var shape: ShapePreset?
 
+    /// The webcam, when one was recorded.
+    public var camera: CameraTrack?
+
     public var currentShape: ShapePreset { shape ?? .wide16x9 }
 
     public init(
