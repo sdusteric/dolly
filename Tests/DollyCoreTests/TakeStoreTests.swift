@@ -76,4 +76,17 @@ import Testing
         let ids = store.list().compactMap { if case .ok(let t, _) = $0 { t.id } else { nil } }
         #expect(ids == [newer.id, older.id])
     }
+
+    @Test func importBackdropReplacesOld() throws {
+        defer { try? FileManager.default.removeItem(at: home) }
+        let folder = try store.createFolder(for: UUID())
+        let a = home.appending(path: "a.PNG"), b = home.appending(path: "b.jpg")
+        try Data([1]).write(to: a)
+        try Data([2, 2]).write(to: b)
+        #expect(try store.importBackdrop(a, into: folder) == "backdrop.png")
+        #expect(try store.importBackdrop(b, into: folder) == "backdrop.jpg")
+        let names = try FileManager.default.contentsOfDirectory(atPath: folder.path).filter { $0.hasPrefix("backdrop") }
+        #expect(names == ["backdrop.jpg"])
+        #expect(try Data(contentsOf: folder.appending(path: "backdrop.jpg")) == Data([2, 2]))
+    }
 }

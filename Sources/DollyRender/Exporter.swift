@@ -31,7 +31,7 @@ public final class Exporter: ExportRunning {
         try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: scratch) }
         let temp = scratch.appending(path: "export.mp4")
-        let size = plan.shape.pixelSize
+        let size = plan.shape.pixelSize(recording: plan.take.size)
         let writer = try AVAssetWriter(outputURL: temp, fileType: .mp4)
         writer.shouldOptimizeForNetworkUse = true
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: [

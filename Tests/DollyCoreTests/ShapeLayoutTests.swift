@@ -4,9 +4,22 @@ import Testing
 
 @Suite struct ShapeLayoutTests {
     @Test func presetSizes() {
-        #expect(ShapePreset.wide16x9.pixelSize == PixelSize(width: 1920, height: 1080))
-        #expect(ShapePreset.tall9x16.pixelSize == PixelSize(width: 1080, height: 1920))
+        #expect(ShapePreset.wide16x9.pixelSize(recording: .zero) == PixelSize(width: 1920, height: 1080))
+        #expect(ShapePreset.tall9x16.pixelSize(recording: .zero) == PixelSize(width: 1080, height: 1920))
         #expect(ShapePreset.portrait4x5.label == "4:5" && ShapePreset.portrait4x5.fileSuffix == "4x5")
+    }
+
+    @Test func originalIsLongSide1920AndEven() {
+        #expect(ShapePreset.allCases.first == .original)
+        #expect(ShapePreset.original.label == "Original" && ShapePreset.original.fileSuffix == "original")
+        #expect(ShapePreset.original.pixelSize(recording: CGSize(width: 848, height: 858)) == PixelSize(width: 1898, height: 1920))
+        #expect(ShapePreset.original.pixelSize(recording: CGSize(width: 1512, height: 982)) == PixelSize(width: 1920, height: 1246))
+        #expect(ShapePreset.tall9x16.pixelSize(recording: .zero) == PixelSize(width: 1080, height: 1920))
+    }
+
+    @Test func originalLayoutFitsTheRecording() {
+        let l = ShapeLayout(shape: .original, recordingSize: CGSize(width: 1512, height: 982), padding: 64)
+        #expect(l.canvas == CGSize(width: 1920, height: 1246))
     }
 
     @Test func layoutFitsShelfDemoIn16x9() {

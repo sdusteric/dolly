@@ -32,6 +32,10 @@ public final class ExportSheetModel {
 
     public static func doneText(_ count: Int) -> String { "Saved \(count) \(count == 1 ? "file" : "files")" }
 
+    public var sizeText: String {
+        let size = shape.pixelSize(recording: editor.take.size)
+        return "\(size.width) × \(size.height)"
+    }
     public var plan: ExportPlan { ExportPlan(take: editor.take, shape: shape, fps: fps, folder: folder) }
 
     public func export() async {
@@ -107,7 +111,7 @@ public struct ExportSheet: View {
             HStack(spacing: 8) {
                 Image(systemName: "checkmark.square.fill").foregroundStyle(Theme.ink.color)
                 Text(model.shape.label).font(Theme.Font.display(14))
-                Text(verbatim: "\(model.shape.pixelSize.width) × \(model.shape.pixelSize.height)").font(Theme.Font.meta)
+                Text(verbatim: model.sizeText).font(Theme.Font.meta)
                     .monospacedDigit().foregroundStyle(Theme.muted.color)
             }
             .accessibilityElement(children: .combine)

@@ -29,7 +29,8 @@ public struct ShapeLayout: Sendable, Hashable {
     public init(shape: ShapePreset, recordingSize: CGSize, padding: Double) {
         self.shape = shape
         self.recordingSize = recordingSize
-        canvas = CGSize(width: shape.pixelSize.width, height: shape.pixelSize.height)
+        let pixels = shape.pixelSize(recording: recordingSize)
+        canvas = CGSize(width: pixels.width, height: pixels.height)
         let pad = padding * min(canvas.width, canvas.height) / 1080
         let scale = min((canvas.width - 2 * pad) / max(recordingSize.width, 1),
                         (canvas.height - 2 * pad) / max(recordingSize.height, 1))

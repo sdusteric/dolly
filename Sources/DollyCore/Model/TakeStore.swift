@@ -93,6 +93,21 @@ public final class TakeStore: Sendable {
         return total
     }
 
+    /// Copies a picture into the take folder as `backdrop.<ext>`, so the take still opens after the
+    /// original moves, and removes any older backdrop. Returns the new file name.
+    public func importBackdrop(_ source: URL, into folder: URL) throws -> String {
+        let ext = source.pathExtension.lowercased()
+        let name = "backdrop." + (ext.isEmpty ? "jpg" : ext)
+        let manager = FileManager.default
+        let staged = folder.appending(path: ".backdrop-\(UUID().uuidString)")
+        try manager.copyItem(at: source, to: staged)
+        for old in try manager.contentsOfDirectory(atPath: folder.path(percentEncoded: false)) where old.hasPrefix("backdrop.") {
+            try manager.removeItem(at: folder.appending(path: old))
+        }
+        try manager.moveItem(at: staged, to: folder.appending(path: name))
+        return name
+    }
+
     static let encoder: JSONEncoder = {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

@@ -136,7 +136,7 @@ public struct InspectorView: View {
                 Text("Background")
                 Spacer()
                 HStack(spacing: 6) {
-                    ForEach(Look.backgrounds, id: \.self) { hex in
+                    ForEach(Look.flatColors, id: \.self) { hex in
                         swatch(hex, selected: look.background == .color(hex: hex)) {
                             var next = look
                             next.background = .color(hex: hex)
@@ -148,7 +148,7 @@ public struct InspectorView: View {
             .frame(minHeight: 32)
             lookStepper("Padding", text: InspectorModel.pointsText(look.padding), value: look.padding, range: 0...160, step: 8) { $0.padding = $1 }
             lookStepper("Corners", text: InspectorModel.pointsText(look.corners), value: look.corners, range: 0...24, step: 2) { $0.corners = $1 }
-            lookToggle("Shadow", look.shadow) { $0.shadow = $1 }
+            lookToggle("Shadow", look.shadow > 0) { $0.shadow = $1 ? 0.6 : 0 }
             lookStepper("Pointer size", text: InspectorModel.depthText(look.pointerScale), value: look.pointerScale, range: 1...3, step: 0.25) {
                 $0.pointerScale = $1
             }

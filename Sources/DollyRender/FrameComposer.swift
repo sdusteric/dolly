@@ -44,11 +44,11 @@ public struct FrameComposer: Sendable {
         ])
 
         var frame = CIImage(color: Self.color(look.background)).cropped(to: canvasRect)
-        if look.shadow {
+        if look.shadow > 0 {
             let shape = CIFilter.roundedRectangleGenerator()
             shape.extent = rect
             shape.radius = Float(radius)
-            shape.color = CIColor(red: 0, green: 0, blue: 0, alpha: 0.28)
+            shape.color = CIColor(red: 0, green: 0, blue: 0, alpha: 0.28 * look.shadow / 0.6)
             let shadow = (shape.outputImage ?? CIImage.empty())
                 .transformed(by: CGAffineTransform(translationX: 0, y: -0.02 * rect.width))
                 .applyingGaussianBlur(sigma: 0.04 * rect.width / 2)
@@ -96,10 +96,14 @@ public struct FrameComposer: Sendable {
 
     static func color(_ background: Look.Background) -> CIColor {
         switch background {
-        case .color(let hex):
-            let v = UInt32(hex.dropFirst(), radix: 16) ?? 0x3E4A4F
-            return CIColor(red: Double(v >> 16 & 0xFF) / 255, green: Double(v >> 8 & 0xFF) / 255, blue: Double(v & 0xFF) / 255,
-                           colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!) ?? CIColor(red: 0.24, green: 0.29, blue: 0.31)
+        case .color(let hex): color(hex: hex)
+        case .gradient, .picture: color(hex: Look.flatColors[0])
         }
+    }
+
+    static func color(hex: String) -> CIColor {
+        let v = UInt32(hex.dropFirst(), radix: 16) ?? 0x3E4A4F
+        return CIColor(red: Double(v >> 16 & 0xFF) / 255, green: Double(v >> 8 & 0xFF) / 255, blue: Double(v & 0xFF) / 255,
+                       colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!) ?? CIColor(red: 0.24, green: 0.29, blue: 0.31)
     }
 }

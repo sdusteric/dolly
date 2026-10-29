@@ -45,6 +45,10 @@ public struct Take: Codable, Hashable, Identifiable, Sendable {
     /// Host clock seconds of the first frame; pointer log times are relative to it.
     public var recordingStartHost: Double
     public var notes: [String]
+    /// The shape the stage last showed; nil (every M1 take) reads as 16:9.
+    public var shape: ShapePreset?
+
+    public var currentShape: ShapePreset { shape ?? .wide16x9 }
 
     public init(
         id: UUID = UUID(), name: String, created: Date = Date(), target: TargetKind, size: CGSize,
