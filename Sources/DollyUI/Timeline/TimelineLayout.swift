@@ -7,6 +7,12 @@ nonisolated public enum TimelineHit: Hashable, Sendable {
     public enum TrimEdge: Hashable, Sendable { case start, end }
     case strip(Zoom.ID, StripPart)
     case emptyZoomLane(Double)
+    /// The camera lane where the camera shows, at a time.
+    case cameraBar(Double)
+    /// A hidden stretch of the camera, by index.
+    case cameraGap(Int, StripPart)
+    case caption(Caption.ID, StripPart)
+    case emptyCaptionLane(Double)
     case trim(TrimEdge)
     case ruler(Double)
     case none
@@ -17,10 +23,14 @@ nonisolated public enum TimelineHit: Hashable, Sendable {
 nonisolated public struct TimelineLayout: Sendable {
     public static let labelColumn: CGFloat = 64
     public static let ruler = CGRect(x: 0, y: 0, width: 0, height: 18)
-    public static let videoLane = CGRect(x: 0, y: 26, width: 0, height: 56)
-    public static let zoomLane = CGRect(x: 0, y: 88, width: 0, height: 46)
-    public static let clickLane = CGRect(x: 0, y: 140, width: 0, height: 20)
-    public static let height: CGFloat = 160
+    public static let videoLane = CGRect(x: 0, y: 24, width: 0, height: 44)
+    public static let zoomLane = CGRect(x: 0, y: 72, width: 0, height: 46)
+    public static let cameraLane = CGRect(x: 0, y: 122, width: 0, height: 26)
+    public static let captionLane = CGRect(x: 0, y: 152, width: 0, height: 30)
+    public static let clickLane = CGRect(x: 0, y: 186, width: 0, height: 18)
+    public static let height: CGFloat = 204
+    /// The camera bar and caption chips sit 3 pt inside their lanes.
+    public static let laneInset: CGFloat = 3
     public static let stripTop: CGFloat = 4
     public static let stripHeight: CGFloat = 22
     public static let edge: CGFloat = 6
@@ -51,7 +61,48 @@ nonisolated public struct TimelineLayout: Sendable {
                 CGRect(x: frame.maxX - outWidth, y: frame.minY, width: outWidth, height: frame.height))
     }
 
-    public func hit(_ p: CGPoint, zooms: [Zoom], trim: ClosedRange<Double>? = nil) -> TimelineHit {
+    public func chip(for caption: Caption) -> CGRect {
+        CGRect(x: x(for: caption.start), y: Self.captionLane.minY + Self.laneInset,
+               width: max(x(for: caption.end) - x(for: caption.start), 1), height: Self.captionLane.height - 2 * Self.laneInset)
+    }
+
+    /// Where the camera shows on its lane: the full width less the hidden stretches.
+    public func cameraBars(_ camera: CameraTrack) -> [CGRect] {
+        var bars: [CGRect] = []
+        var from: Double = 0
+        let y = Self.cameraLane.minY + Self.laneInset, h = Self.cameraLane.height - 2 * Self.laneInset
+        for gap in camera.hidden.sorted(by: { $0.lowerBound < $1.lowerBound }) {
+            if gap.lowerBound > from { bars.append(CGRect(x: x(for: from), y: y, width: x(for: gap.lowerBound) - x(for: from), height: h)) }
+            from = max(from, gap.upperBound)
+        }
+        if from < duration { bars.append(CGRect(x: x(for: from), y: y, width: width - x(for: from), height: h)) }
+        return bars
+    }
+
+    /// Which part of a span `p.x` falls on, with 6 pt edge zones like a zoom strip's.
+    private func part(_ px: CGFloat, _ minX: CGFloat, _ maxX: CGFloat) -> TimelineHit.StripPart? {
+        guard px >= minX, px <= maxX else { return nil }
+        if px - minX <= Self.edge { return .startEdge }
+        if maxX - px <= Self.edge { return .endEdge }
+        return .body
+    }
+
+    public func hit(_ p: CGPoint, zooms: [Zoom], trim: ClosedRange<Double>? = nil, camera: CameraTrack? = nil,
+                    captions: [Caption] = []) -> TimelineHit {
+        if p.y >= Self.cameraLane.minY, p.y <= Self.cameraLane.maxY {
+            guard let camera else { return .none }
+            for (i, gap) in camera.hidden.enumerated() {
+                if let part = part(p.x, x(for: gap.lowerBound), x(for: gap.upperBound)) { return .cameraGap(i, part) }
+            }
+            return .cameraBar(t(for: p.x))
+        }
+        if p.y >= Self.captionLane.minY, p.y <= Self.captionLane.maxY {
+            for caption in captions {
+                let c = chip(for: caption)
+                if let part = part(p.x, c.minX, c.maxX) { return .caption(caption.id, part) }
+            }
+            return .emptyCaptionLane(t(for: p.x))
+        }
         if p.y >= Self.zoomLane.minY, p.y <= Self.zoomLane.maxY {
             for zoom in zooms {
                 let f = strip(for: zoom).frame
@@ -77,6 +128,14 @@ nonisolated public enum TimelineAccessibility {
         let what = zoom.mode == .hold ? "holds on \(zoom.name)" : "follows the pointer, \(zoom.name)"
         return "Zoom \(index + 1) of \(count), \(TimeText.clock(zoom.start)) to \(TimeText.clock(zoom.end)), "
             + String(format: "%.1f times, ", zoom.depth) + what
+    }
+}
+
+extension TimelineAccessibility {
+    /// "Caption 4 of 10, 0:11.4 to 0:14.6, Each tile has its own quick actions."
+    public static func label(_ caption: Caption, index: Int, count: Int) -> String {
+        "Caption \(index + 1) of \(count), \(TimeText.clock(caption.start)) to \(TimeText.clock(caption.end)), "
+            + (caption.text.isEmpty ? "empty" : caption.text)
     }
 }
 

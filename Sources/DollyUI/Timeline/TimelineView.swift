@@ -2,9 +2,10 @@ import AppKit
 import DollyCore
 import SwiftUI
 
-/// The timeline (spec 6.3): play and time, the length line, then the ruler and three lanes. Zooms
-/// are pink tape strips; the strip and the stage's corners are one selection. Drags follow the
-/// pointer 1:1 and each is one undo step; a strip added or removed bridges with 160 ms (spec 10.6).
+/// The timeline (spec 6.3, studio spec item 6): play and time, the length line, then the ruler and
+/// five lanes. Zooms are pink tape strips; the strip and the stage's corners are one selection. The
+/// camera lane shows where the webcam shows; captions are chips. Drags follow the pointer 1:1 and
+/// each is one undo step; a strip added or removed bridges with 160 ms (spec 10.6).
 public struct TimelineView: View {
     @Bindable var editor: EditorModel
     let clickTimes: [Double]
@@ -19,6 +20,7 @@ public struct TimelineView: View {
     struct DragState {
         var hit: TimelineHit
         var zoom: Zoom?
+        var caption: Caption?
         var moved = false
     }
 
@@ -85,7 +87,8 @@ public struct TimelineView: View {
 
     private var laneNames: some View {
         ZStack(alignment: .topLeading) {
-            ForEach([("Video", TimelineLayout.videoLane), ("Zoom", TimelineLayout.zoomLane), ("Clicks", TimelineLayout.clickLane)], id: \.0) { name, lane in
+            ForEach([("Video", TimelineLayout.videoLane), ("Zoom", TimelineLayout.zoomLane), ("Camera", TimelineLayout.cameraLane),
+                     ("Captions", TimelineLayout.captionLane), ("Clicks", TimelineLayout.clickLane)], id: \.0) { name, lane in
                 Text(name).font(Theme.Font.meta).foregroundStyle(Theme.muted.color)
                     .offset(y: lane.minY + (name == "Zoom" ? 8 : lane.height / 2 - 8))
             }
@@ -101,10 +104,17 @@ public struct TimelineView: View {
                 strip(zoom, index: index, layout: layout)
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.97)))
             }
-            if let ghost {
-                Rectangle().fill(Theme.tape.color.opacity(0.5))
-                    .frame(width: max(layout.x(for: ghost.upperBound - ghost.lowerBound), 1), height: TimelineLayout.stripHeight)
-                    .offset(x: layout.x(for: ghost.lowerBound), y: TimelineLayout.zoomLane.minY + TimelineLayout.stripTop)
+            let captions = editor.take.captions?.items ?? []
+            ForEach(Array(captions.enumerated()), id: \.element.id) { index, caption in
+                chip(caption, index: index, count: captions.count, layout: layout)
+            }
+            if let ghost, let hit = drag?.hit {
+                let camera = { if case .cameraBar = hit { true } else { false } }()
+                let lane = camera ? TimelineLayout.cameraLane : TimelineLayout.zoomLane
+                Rectangle().fill(camera ? Theme.scrim.color : Theme.tape.color.opacity(0.5))
+                    .frame(width: max(layout.x(for: ghost.upperBound - ghost.lowerBound), 1),
+                           height: camera ? lane.height - 2 * TimelineLayout.laneInset : TimelineLayout.stripHeight)
+                    .offset(x: layout.x(for: ghost.lowerBound), y: lane.minY + (camera ? TimelineLayout.laneInset : TimelineLayout.stripTop))
                     .allowsHitTesting(false)
             }
             playhead(layout)
@@ -113,9 +123,11 @@ public struct TimelineView: View {
         .animation(.easeOut(duration: Theme.Motion.stripBridge), value: editor.take.zooms.map(\.id))
         .onContinuousHover(coordinateSpace: .named("lanes")) { phase in
             guard case .active(let p) = phase else { NSCursor.arrow.set(); return }
-            switch layout.hit(p, zooms: editor.take.zooms, trim: editor.take.trim) {
-            case .strip(_, .startEdge), .strip(_, .endEdge), .trim: NSCursor.resizeLeftRight.set()
-            case .strip(_, .body): NSCursor.openHand.set()
+            switch layout.hit(p, zooms: editor.take.zooms, trim: editor.take.trim, camera: editor.take.camera,
+                              captions: editor.take.captions?.items ?? []) {
+            case .strip(_, .startEdge), .strip(_, .endEdge), .trim, .cameraGap(_, .startEdge), .cameraGap(_, .endEdge),
+                 .caption(_, .startEdge), .caption(_, .endEdge): NSCursor.resizeLeftRight.set()
+            case .strip(_, .body), .caption(_, .body): NSCursor.openHand.set()
             default: NSCursor.arrow.set()
             }
         }
@@ -150,6 +162,20 @@ public struct TimelineView: View {
         context.fill(Path(roundedRect: CGRect(x: end - 10, y: videoRect.minY, width: 10, height: videoRect.height), cornerRadius: 3), with: .color(ink))
         let zoomLane = CGRect(x: 0, y: TimelineLayout.zoomLane.minY, width: size.width, height: TimelineLayout.zoomLane.height)
         context.fill(Path(roundedRect: zoomLane, cornerRadius: Theme.Size.controlRadius), with: .color(raised))
+        if let camera = editor.take.camera {
+            let selected = editor.selection == .camera
+            for bar in layout.cameraBars(camera) {
+                let shape = Path(roundedRect: bar, cornerRadius: 4)
+                context.fill(shape, with: .color(control))
+                if selected { context.stroke(shape, with: .color(ink), lineWidth: 2) }
+                if bar.width > 64 {
+                    context.draw(Text("Camera").font(Theme.Font.meta).foregroundStyle(ink), at: CGPoint(x: bar.minX + 8, y: bar.midY),
+                                 anchor: .leading)
+                }
+            }
+        }
+        let captionLane = CGRect(x: 0, y: TimelineLayout.captionLane.minY, width: size.width, height: TimelineLayout.captionLane.height)
+        context.fill(Path(roundedRect: captionLane, cornerRadius: Theme.Size.controlRadius), with: .color(raised))
         for t in clickTimes {
             context.fill(Path(ellipseIn: CGRect(x: layout.x(for: t) - 5, y: TimelineLayout.clickLane.minY + 5, width: 10, height: 10)), with: .color(ink))
         }
@@ -201,10 +227,63 @@ public struct TimelineView: View {
         .accessibilityAction(named: "Remove") { editor.remove(zoom.id) }
     }
 
+    /// One caption on its lane: a sheet-colored chip with its words, ink-ringed when selected.
+    private func chip(_ caption: Caption, index: Int, count: Int, layout: TimelineLayout) -> some View {
+        let frame = layout.chip(for: caption)
+        let selected = editor.selection == .caption(caption.id)
+        let shape = RoundedRectangle(cornerRadius: 4)
+        return Text(caption.text.isEmpty ? " " : caption.text)
+            .font(Theme.Font.meta)
+            .foregroundStyle(Theme.ink.color)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .padding(.horizontal, 6)
+            .frame(width: frame.width, height: frame.height, alignment: .leading)
+            .background(shape.fill(Theme.sheet.color))
+            .overlay(shape.strokeBorder(selected ? Theme.ink.color : Theme.control.color, lineWidth: selected ? 2 : 1))
+            .clipShape(shape)
+            .contentShape(Rectangle())
+            .offset(x: frame.minX, y: frame.minY)
+            .gesture(chipGesture(caption, layout: layout))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(TimelineAccessibility.label(caption, index: index, count: count))
+            .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
+            .accessibilityAction { editor.selectCaption(caption.id) }
+            .accessibilityAction(named: "Move earlier") { editor.moveCaption(caption.id, by: -0.1) }
+            .accessibilityAction(named: "Move later") { editor.moveCaption(caption.id, by: 0.1) }
+            .accessibilityAction(named: "Remove") { editor.removeCaption(caption.id) }
+    }
+
+    private func chipGesture(_ caption: Caption, layout: TimelineLayout) -> some Gesture {
+        DragGesture(minimumDistance: 0, coordinateSpace: .named("lanes"))
+            .onChanged { value in
+                if drag == nil {
+                    drag = DragState(hit: layout.hit(value.startLocation, zooms: [], captions: [caption]), caption: caption)
+                    editor.selectCaption(caption.id)
+                    editor.beginGesture()
+                }
+                guard var state = drag, let start = state.caption else { return }
+                guard abs(value.translation.width) >= 1 || state.moved else { return }
+                state.moved = true
+                drag = state
+                switch state.hit {
+                case .caption(_, .startEdge): editor.resizeCaption(caption.id, edge: .start, to: layout.t(for: value.location.x))
+                case .caption(_, .endEdge): editor.resizeCaption(caption.id, edge: .end, to: layout.t(for: value.location.x))
+                default:
+                    let target = start.start + layout.t(for: abs(value.translation.width)) * (value.translation.width < 0 ? -1 : 1)
+                    editor.moveCaption(caption.id, by: target - (editor.caption(caption.id)?.start ?? start.start))
+                }
+            }
+            .onEnded { _ in
+                editor.endGesture()
+                drag = nil
+            }
+    }
+
     private func playhead(_ layout: TimelineLayout) -> some View {
         let x = layout.x(for: editor.playhead)
         return ZStack(alignment: .top) {
-            Rectangle().fill(Theme.ink.color).frame(width: 2, height: TimelineLayout.clickLane.maxY + 4)
+            Rectangle().fill(Theme.ink.color).frame(width: 2, height: TimelineLayout.height + 4)
             RoundedRectangle(cornerRadius: 2).fill(Theme.ink.color).frame(width: 12, height: 8)
         }
         .offset(x: x - 6, y: -4)
@@ -242,13 +321,20 @@ public struct TimelineView: View {
             .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .named("lanes"))
                 .onChanged { value in
                     if drag == nil {
-                        drag = DragState(hit: layout.hit(value.startLocation, zooms: editor.take.zooms, trim: editor.take.trim))
-                        if case .trim = drag?.hit { editor.beginGesture() }
+                        drag = DragState(hit: layout.hit(value.startLocation, zooms: editor.take.zooms, trim: editor.take.trim,
+                                                         camera: editor.take.camera, captions: editor.take.captions?.items ?? []))
+                        switch drag?.hit {
+                        case .trim, .cameraGap(_, .startEdge), .cameraGap(_, .endEdge): editor.beginGesture()
+                        default: break
+                        }
                     }
                     let t = layout.t(for: value.location.x)
+                    if abs(value.translation.width) > 4 { drag?.moved = true }
                     switch drag?.hit {
                     case .ruler: editor.playhead = t
-                    case .emptyZoomLane(let t0): if abs(value.translation.width) > 4 { ghost = min(t0, t)...max(t0, t) }
+                    case .emptyZoomLane(let t0), .cameraBar(let t0): if abs(value.translation.width) > 4 { ghost = min(t0, t)...max(t0, t) }
+                    case .cameraGap(let i, .startEdge): editor.resizeCameraGap(index: i, edge: .start, to: t)
+                    case .cameraGap(let i, .endEdge): editor.resizeCameraGap(index: i, edge: .end, to: t)
                     case .trim(.start): editor.setTrim(min(t, editor.take.trim.upperBound - 1)...editor.take.trim.upperBound)
                     case .trim(.end): editor.setTrim(editor.take.trim.lowerBound...max(t, editor.take.trim.lowerBound + 1))
                     default: break
@@ -261,8 +347,15 @@ public struct TimelineView: View {
                             editor.select(nil)
                             editor.playhead = t0
                         }
-                    case .trim: editor.endGesture()
-                    default: break
+                    case .trim, .cameraGap(_, .startEdge), .cameraGap(_, .endEdge): editor.endGesture()
+                    case .some(let hit):
+                        let t0: Double = switch hit {
+                        case .cameraBar(let t), .emptyCaptionLane(let t): t
+                        default: layout.t(for: value.startLocation.x)
+                        }
+                        TimelineInput.finishDrag(hit, from: t0, to: layout.t(for: value.location.x), moved: drag?.moved ?? false,
+                                                 editor: editor)
+                    case nil: break
                     }
                     ghost = nil
                     drag = nil
