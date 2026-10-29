@@ -32,6 +32,14 @@ enum ShotScenarios {
         return ctx?.makeImage()
     }()
 
+    /// The export sheet's plates: the play still in every shape.
+    static func plates(_ editor: EditorModel, footage: CGImage?) -> [ShapePreset: CGImage] {
+        guard let footage else { return [:] }
+        var out: [ShapePreset: CGImage] = [:]
+        for shape in ShapePreset.allCases { out[shape] = ShotWorkspace.playStill(editor, footage, shape: shape) }
+        return out
+    }
+
     /// The studio mockups (docs/mockup/studio): shape, backdrop, playhead and what is selected.
     static func studio(_ scenario: String, _ editor: EditorModel) {
         editor.select(nil)

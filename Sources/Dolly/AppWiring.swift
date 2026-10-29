@@ -267,10 +267,10 @@ final class EditorController: NSObject, NSWindowDelegate {
     func showExport() {
         guard screen.editor != nil, let window, window.attachedSheet == nil else { return }
         preview.pause()
-        Task { presentExport(poster: await preview.outputStill()) }
+        Task { presentExport(posters: await preview.outputStills()) }
     }
 
-    private func presentExport(poster: CGImage?) {
+    private func presentExport(posters: [ShapePreset: CGImage]) {
         guard let editor = screen.editor, let folder, let window, window.attachedSheet == nil else { return }
         let model = ExportSheetModel(editor: editor, takeFolder: folder, folder: exportsFolder, exporter: Exporter())
         model.fps = settings.exportFPS
@@ -280,7 +280,7 @@ final class EditorController: NSObject, NSWindowDelegate {
         }
         let sheet = NSWindow(contentRect: .zero, styleMask: [.titled], backing: .buffered, defer: false)
         let view = ExportSheet(
-            model: model, poster: poster,
+            model: model, posters: posters,
             chooseFolder: { [weak self, weak sheet] in
                 guard let self, let sheet else { return }
                 self.chooseFolder(for: model, over: sheet)
@@ -537,19 +537,28 @@ final class PreviewPlayer: PlaybackControlling {
         aimImage = StillRenderer.render(take: editor.take, folder: folder, recording: recordingFrame, camera: nil, pointer: nil, ring: nil)
     }
 
-    /// The output at the playhead, for the export sheet's plate.
-    func outputStill() async -> CGImage? {
-        guard let editor, let movie else { return nil }
+    /// The output at the playhead in every shape, for the export sheet's plates.
+    func outputStills() async -> [ShapePreset: CGImage] {
+        guard let editor, let movie, let folder else { return [:] }
         let take = editor.take
         let t = editor.playhead
-        guard let frame = await Self.frame(of: movie, at: t) else { return nil }
-        let layout = ShapeLayout(shape: .wide16x9, recordingSize: take.size, padding: take.look.padding)
+        guard let frame = await Self.frame(of: movie, at: t) else { return [:] }
+        var cameraFrame: CGImage?
+        if let camera = take.camera {
+            cameraFrame = await Self.frame(of: folder.appending(path: camera.file), at: max(t - camera.startOffset, 0))
+        }
         let pointer = editor.pointer
-        let path = CameraPath(zooms: take.zooms, layout: layout, pointer: pointer.map { p in { @Sendable t in p.position(at: t) } },
-                              duration: take.duration)
-        return StillRenderer.render(take: take, recording: frame, camera: path.camera(at: t),
-                                    pointer: pointer?.position(at: t).map { ($0, pointer?.shape(at: t) ?? .arrow) },
-                                    ring: pointer?.ring(at: t).map { ($0.center, $0.progress) })
+        var stills: [ShapePreset: CGImage] = [:]
+        for shape in ShapePreset.allCases {
+            let layout = ShapeLayout(shape: shape, recordingSize: take.size, padding: take.look.padding)
+            let path = CameraPath(zooms: take.zooms, layout: layout, pointer: pointer.map { p in { @Sendable t in p.position(at: t) } },
+                                  duration: take.duration)
+            stills[shape] = StillRenderer.render(take: take, folder: folder, shape: shape, recording: frame, camera: path.camera(at: t),
+                                                 pointer: pointer?.position(at: t).map { ($0, pointer?.shape(at: t) ?? .arrow) },
+                                                 ring: pointer?.ring(at: t).map { ($0.center, $0.progress) },
+                                                 cameraFrame: cameraFrame, at: t, depthProgress: path.depthProgress(at: t))
+        }
+        return stills
     }
 
     /// One recording frame, within a frame of `t`.

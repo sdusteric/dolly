@@ -130,11 +130,13 @@ enum ShotOverlays {
             if let editor {
                 let sheet = ExportSheetModel(editor: editor, takeFolder: URL(filePath: "/tmp"),
                                              folder: URL(filePath: NSHomeDirectory() + "/Movies/Dolly"), exporter: NoExporter())
+                let _ = sheet.toggle(.tall9x16)
                 let _ = sheet.state = scenario == "export-progress" ? .exporting(progress: 0.62)
-                    : scenario == "export-done" ? .done([URL(filePath: "/x/Shelf Tile Board demo 16x9.mp4")]) : .ready
+                    : scenario == "export-done" ? .done([URL(filePath: "/x/Shelf Tile Board demo 16x9.mp4"),
+                                                         URL(filePath: "/x/Shelf Tile Board demo 9x16.mp4")]) : .ready
                 ZStack(alignment: .top) {
                     Color.black.opacity(0.25)
-                    ExportSheet(model: sheet, poster: footage.flatMap { ShotWorkspace.playStill(editor, $0) }, chooseFolder: {},
+                    ExportSheet(model: sheet, posters: ShotScenarios.plates(editor, footage: footage), chooseFolder: {},
                                 copy: { _ in }, reveal: { _ in }, close: {})
                         .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 12, bottomTrailingRadius: 12))
                         .compositingGroup().shadow(color: .black.opacity(0.25), radius: 24, y: 8)
