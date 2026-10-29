@@ -157,7 +157,7 @@ public struct TimelineView: View {
 
     private func strip(_ zoom: Zoom, index: Int, layout: TimelineLayout) -> some View {
         let geometry = layout.strip(for: zoom)
-        let selected = editor.selection == zoom.id
+        let selected = editor.selectedZoom == zoom.id
         let next = editor.take.zooms.first { $0.start > zoom.start }.map { layout.x(for: $0.start) } ?? layout.width
         return ZStack(alignment: .topLeading) {
             Rectangle().fill(Theme.tape.color)

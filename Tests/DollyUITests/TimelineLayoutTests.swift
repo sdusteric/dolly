@@ -93,7 +93,7 @@ import Testing
         TimelineInput.apply(.removeSelected, to: m, playback: nil)
         #expect(m.take.zooms.count == 2)
         TimelineInput.apply(.selectNext, to: m, playback: nil)
-        #expect(m.selection == m.take.zooms[0].id)
+        #expect(m.selectedZoom == m.take.zooms[0].id)
         TimelineInput.apply(.step(seconds: -1), to: m, playback: nil)
         #expect(abs(m.playhead - 19) < 0.001)
         TimelineInput.apply(.undo, to: m, playback: nil)

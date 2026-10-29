@@ -192,7 +192,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         case #selector(exportTake(_:)), #selector(showInFinder(_:)): return model != nil
         case #selector(undoEdit(_:)): return editing ? NSApp.keyWindow?.firstResponder?.undoManager?.canUndo == true : model?.canUndo == true
         case #selector(redoEdit(_:)): return editing ? NSApp.keyWindow?.firstResponder?.undoManager?.canRedo == true : model?.canRedo == true
-        case #selector(deleteZoom(_:)): return !editing && model?.selection != nil
+        case #selector(deleteZoom(_:)): return !editing && model?.selectedZoom != nil
         case #selector(checkForUpdates(_:)): return updater != nil
         default: return true
         }

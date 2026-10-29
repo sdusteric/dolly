@@ -40,7 +40,7 @@ public enum TimelineInput {
         func move(_ dt: Double) { editor.playhead = min(max(editor.playhead + dt, range.lowerBound), range.upperBound) }
         switch action {
         case .addZoom: editor.addZoom(at: editor.playhead)
-        case .removeSelected: if let id = editor.selection { editor.remove(id) }
+        case .removeSelected: if let id = editor.selectedZoom { editor.remove(id) }
         case .selectNext: editor.selectNext()
         case .togglePlay: playback?.togglePlay()
         case .undo: editor.undo()

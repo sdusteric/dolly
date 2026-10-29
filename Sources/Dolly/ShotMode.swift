@@ -97,7 +97,7 @@ enum ShotWorkspace {
     /// Aim mode shows the recording at 1x; play mode the output at the playhead with its pointer.
     static func still(_ editor: EditorModel, _ inputs: ShotScenarios.Inputs) -> CGImage? {
         guard let footage = inputs.footage else { return nil }
-        if editor.selection != nil { return StillRenderer.render(take: editor.take, recording: footage, camera: nil, pointer: nil, ring: nil) }
+        if editor.selectedZoom != nil { return StillRenderer.render(take: editor.take, recording: footage, camera: nil, pointer: nil, ring: nil) }
         return playStill(editor, footage)
     }
 

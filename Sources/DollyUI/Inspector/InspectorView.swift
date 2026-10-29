@@ -53,7 +53,7 @@ public struct InspectorView: View {
 
     private var content: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if let id = editor.selection, let zoom = editor.zoom(id) {
+            if let id = editor.selectedZoom, let zoom = editor.zoom(id) {
                 zoomSection(zoom)
                 Rectangle().fill(Theme.border.color).frame(height: 1).padding(.vertical, 12)
             }

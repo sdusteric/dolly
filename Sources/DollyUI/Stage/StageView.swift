@@ -22,7 +22,7 @@ public struct StageView: View {
         self.clicks = clicks
     }
 
-    private var aimZoom: Zoom? { isPlaying ? nil : editor.selection.flatMap { editor.zoom($0) } }
+    private var aimZoom: Zoom? { isPlaying ? nil : editor.selectedZoom.flatMap { editor.zoom($0) } }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 12) {

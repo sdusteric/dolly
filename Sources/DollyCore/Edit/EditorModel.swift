@@ -7,6 +7,8 @@ import Observation
 @Observable
 public final class EditorModel {
     public enum Edge: Sendable { case start, end }
+    /// What the stage, the timeline and the inspector have selected.
+    public enum Selection: Hashable, Sendable { case zoom(Zoom.ID), caption(Caption.ID), camera }
 
     public static let minGap = 0.2
     public static let depthRange = 1.0...3.0
@@ -14,7 +16,7 @@ public final class EditorModel {
     public static let addedHold = 1.5
 
     public private(set) var take: Take
-    public var selection: Zoom.ID?
+    public var selection: Selection?
     public var playhead: Double = 0
     /// Redrawn when the look's pointer settings change, so preview and export follow at once.
     public private(set) var pointer: PointerPath?
@@ -33,19 +35,27 @@ public final class EditorModel {
 
     public func zoom(_ id: Zoom.ID) -> Zoom? { take.zooms.first { $0.id == id } }
 
+    /// The selected zoom, for the callers that only know zooms.
+    public var selectedZoom: Zoom.ID? {
+        get { if case .zoom(let id) = selection { id } else { nil } }
+        set { selection = newValue.map(Selection.zoom) }
+    }
+
     public var zoomCountText: String {
-        guard let id = selection, let i = take.zooms.firstIndex(where: { $0.id == id }) else { return "" }
+        guard let id = selectedZoom, let i = take.zooms.firstIndex(where: { $0.id == id }) else { return "" }
         return "Zoom \(i + 1) of \(take.zooms.count)"
     }
 
     // MARK: Selection
 
-    public func select(_ id: Zoom.ID?) { selection = id }
+    public func select(_ id: Zoom.ID?) { selectedZoom = id }
+    public func selectCaption(_ id: Caption.ID) { selection = .caption(id) }
+    public func selectCamera() { selection = take.camera == nil ? nil : .camera }
 
     public func selectNext() {
         guard !take.zooms.isEmpty else { return }
-        let i = take.zooms.firstIndex { $0.id == selection } ?? -1
-        selection = take.zooms[(i + 1) % take.zooms.count].id
+        let i = take.zooms.firstIndex { $0.id == selectedZoom } ?? -1
+        selectedZoom = take.zooms[(i + 1) % take.zooms.count].id
     }
 
     // MARK: Edits
@@ -121,13 +131,13 @@ public final class EditorModel {
             $0.zooms.append(zoom)
             $0.zooms.sort { $0.start < $1.start }
         }
-        selection = zoom.id
+        selectedZoom = zoom.id
     }
 
     public func remove(_ id: Zoom.ID) {
         guard zoom(id) != nil else { return }
         change { $0.zooms.removeAll { $0.id == id } }
-        if selection == id { selection = nil }
+        if selectedZoom == id { selection = nil }
     }
 
     /// Clamps zooms into the new trim; a zoom left shorter than its minimum is removed.
@@ -144,10 +154,179 @@ public final class EditorModel {
                 return z.length >= Self.minimumLength(z) - 1e-9 ? z : nil
             }
         }
-        if let s = selection, zoom(s) == nil { selection = nil }
+        if let s = selectedZoom, zoom(s) == nil { selection = nil }
     }
 
     public func setLook(_ l: Look) { change { $0.look = l } }
+
+    // MARK: Studio: shape, backdrop and camera
+
+    /// The stage's shape. Zooms stay as they are (spec 5.3).
+    public func setShape(_ s: ShapePreset) { change { $0.shape = s } }
+
+    public func setBackdrop(_ b: Look.Background) { change { $0.look.background = b } }
+
+    public func setCamera(_ body: (inout CameraTrack) -> Void) {
+        guard take.camera != nil else { return }
+        change { take in
+            guard var camera = take.camera else { return }
+            body(&camera)
+            camera.size = Self.clamp(camera.size, CameraTrack.sizeRange)
+            take.camera = camera
+        }
+    }
+
+    /// Hides the camera from `t0` to `t1`, joined with any hidden stretch it touches.
+    public func hideCamera(from t0: Double, to t1: Double) {
+        let lo = max(min(t0, t1), 0), hi = min(max(t0, t1), take.duration)
+        guard hi - lo >= Self.minGap else { return }
+        setCamera { camera in
+            var merged = lo...hi
+            var rest: [ClosedRange<Double>] = []
+            for r in camera.hidden {
+                if r.lowerBound <= merged.upperBound && merged.lowerBound <= r.upperBound {
+                    merged = min(r.lowerBound, merged.lowerBound)...max(r.upperBound, merged.upperBound)
+                } else {
+                    rest.append(r)
+                }
+            }
+            camera.hidden = (rest + [merged]).sorted { $0.lowerBound < $1.lowerBound }
+        }
+    }
+
+    public func showCamera(range index: Int) {
+        setCamera { if $0.hidden.indices.contains(index) { $0.hidden.remove(at: index) } }
+    }
+
+    /// Drags one end of a hidden stretch; it stops at its neighbors and stays at least 0.2 s long.
+    public func resizeCameraGap(index: Int, edge: Edge, to t: Double) {
+        setCamera { camera in
+            guard camera.hidden.indices.contains(index) else { return }
+            let r = camera.hidden[index]
+            let lo = index > 0 ? camera.hidden[index - 1].upperBound : 0
+            let hi = index + 1 < camera.hidden.count ? camera.hidden[index + 1].lowerBound : take.duration
+            switch edge {
+            case .start: camera.hidden[index] = min(max(t, lo), r.upperBound - Self.minGap)...r.upperBound
+            case .end: camera.hidden[index] = r.lowerBound...max(min(t, hi), r.lowerBound + Self.minGap)
+            }
+        }
+    }
+
+    // MARK: Studio: captions
+
+    public static let captionMinimum = 0.4
+    public static let addedCaption = 2.0
+
+    public func caption(_ id: Caption.ID) -> Caption? { take.captions?.items.first { $0.id == id } }
+
+    /// A fresh transcription. Clears `edited`, so Transcribe again stops asking.
+    public func setCaptions(_ track: CaptionTrack) {
+        var track = track
+        track.items.sort { $0.start < $1.start }
+        track.edited = false
+        change { $0.captions = track }
+        if case .caption(let id) = selection, caption(id) == nil { selection = nil }
+    }
+
+    /// The caption track's own settings (position, size, the .srt switch); not a caption edit.
+    public func setCaptionStyle(_ body: (inout CaptionTrack) -> Void) {
+        change { take in
+            guard var track = take.captions else { return }
+            body(&track)
+            track.size = Self.clamp(track.size, CaptionTrack.sizeRange)
+            take.captions = track
+        }
+    }
+
+    /// A typed caption at `t`, 2 s or up to the next one, empty and selected. Nothing when less than
+    /// 0.4 s is free there.
+    public func addCaption(at t: Double) {
+        let items = take.captions?.items ?? []
+        guard t >= take.trim.lowerBound, !items.contains(where: { $0.start <= t && t < $0.end }) else { return }
+        let next = items.first { $0.start > t }?.start ?? take.trim.upperBound
+        let end = min(t + Self.addedCaption, next, take.trim.upperBound)
+        guard end - t >= Self.captionMinimum else { return }
+        let added = Caption(start: t, end: end, text: "")
+        editCaptions { track in
+            track.items.append(added)
+            track.items.sort { $0.start < $1.start }
+        }
+        selection = .caption(added.id)
+    }
+
+    public func editCaption(_ id: Caption.ID, text: String) {
+        editCaption(id) { c, _, _ in c.text = text }
+    }
+
+    public func removeCaption(_ id: Caption.ID) {
+        guard caption(id) != nil else { return }
+        editCaptions { $0.items.removeAll { $0.id == id } }
+        if selection == .caption(id) { selection = nil }
+    }
+
+    /// Return in the caption field: the text splits at the cursor and the time in proportion to the
+    /// characters on each side.
+    public func splitCaption(_ id: Caption.ID, at characterIndex: Int) {
+        guard let c = caption(id), characterIndex > 0, characterIndex < c.text.count else { return }
+        let cut = c.text.index(c.text.startIndex, offsetBy: characterIndex)
+        let left = c.text[..<cut].trimmingCharacters(in: .whitespaces), right = c.text[cut...].trimmingCharacters(in: .whitespaces)
+        guard !left.isEmpty, !right.isEmpty else { return }
+        let at = c.start + (c.end - c.start) * Double(characterIndex) / Double(c.text.count)
+        let second = Caption(start: at, end: c.end, text: right)
+        editCaptions { track in
+            guard let i = track.items.firstIndex(where: { $0.id == id }) else { return }
+            track.items[i].text = left
+            track.items[i].end = at
+            track.items.insert(second, at: i + 1)
+        }
+        selection = .caption(second.id)
+    }
+
+    /// Delete at the start of the caption field: joins it onto the one before.
+    public func joinCaption(_ id: Caption.ID) {
+        guard let items = take.captions?.items, let i = items.firstIndex(where: { $0.id == id }), i > 0 else { return }
+        let before = items[i - 1].id
+        editCaptions { track in
+            let c = track.items.remove(at: i)
+            track.items[i - 1].text = [track.items[i - 1].text, c.text].filter { !$0.isEmpty }.joined(separator: " ")
+            track.items[i - 1].end = c.end
+        }
+        selection = .caption(before)
+    }
+
+    public func moveCaption(_ id: Caption.ID, by dt: Double) {
+        editCaption(id) { c, lo, hi in
+            let shift = min(max(dt, lo - c.start), hi - c.end)
+            c.start += shift
+            c.end += shift
+        }
+    }
+
+    public func resizeCaption(_ id: Caption.ID, edge: Edge, to t: Double) {
+        editCaption(id) { c, lo, hi in
+            switch edge {
+            case .start: c.start = min(max(t, lo), c.end - Self.captionMinimum)
+            case .end: c.end = max(min(t, hi), c.start + Self.captionMinimum)
+            }
+        }
+    }
+
+    private func editCaptions(_ body: (inout CaptionTrack) -> Void) {
+        change { take in
+            var track = take.captions ?? CaptionTrack(source: .typed, locale: Locale.current.identifier)
+            body(&track)
+            track.edited = true
+            take.captions = track
+        }
+    }
+
+    /// Runs `body` on one caption with the bounds its neighbors and the trim leave it.
+    private func editCaption(_ id: Caption.ID, _ body: (inout Caption, Double, Double) -> Void) {
+        guard let items = take.captions?.items, let i = items.firstIndex(where: { $0.id == id }) else { return }
+        let lo = max(i > 0 ? items[i - 1].end : 0, take.trim.lowerBound)
+        let hi = min(i + 1 < items.count ? items[i + 1].start : take.duration, take.trim.upperBound)
+        editCaptions { body(&$0.items[i], lo, hi) }
+    }
 
     /// The toolbar's name field. Blank names are ignored.
     public func renameTake(_ name: String) {

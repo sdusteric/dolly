@@ -245,7 +245,7 @@ final class EditorController: NSObject, NSWindowDelegate {
     func undo() { screen.editor?.undo() }
     func redo() { screen.editor?.redo() }
     func deleteSelected() {
-        if let editor = screen.editor, let id = editor.selection { editor.remove(id) }
+        if let editor = screen.editor, let id = editor.selectedZoom { editor.remove(id) }
     }
 
     func revealTake() {
@@ -489,7 +489,7 @@ final class PreviewPlayer: PlaybackControlling {
         let id = ObjectIdentifier(editor)
         withObservationTracking {
             _ = editor.playhead
-            _ = editor.selection
+            _ = editor.selectedZoom
         } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self, let editor = self.editor, ObjectIdentifier(editor) == id else { return }
@@ -508,7 +508,7 @@ final class PreviewPlayer: PlaybackControlling {
     // MARK: Frames
 
     private func refreshFrame() {
-        guard let editor, editor.selection != nil, let movie else { return }
+        guard let editor, editor.selectedZoom != nil, let movie else { return }
         frameTask?.cancel()
         let t = editor.playhead
         frameTask = Task { [weak self] in

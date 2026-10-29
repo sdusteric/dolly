@@ -111,7 +111,7 @@ import Testing
         let added = try #require(model.take.zooms.first { $0.source == .manual })
         #expect(added.depth == 2.0 && approx(added.start, 24.0) && approx(added.length, 2.6))
         #expect(approx(added.aim, try #require(model.pointer?.rawPosition(at: 24.0))))
-        #expect(model.selection == added.id)
+        #expect(model.selectedZoom == added.id)
         #expect(model.take.zooms.map(\.start) == model.take.zooms.map(\.start).sorted())
     }
 
@@ -151,7 +151,7 @@ import Testing
     @Test func selectNextWraps() {
         model.select(ids[4])
         model.selectNext()
-        #expect(model.selection == ids[0])
+        #expect(model.selectedZoom == ids[0])
     }
 
     @Test func zoomCountText() {
