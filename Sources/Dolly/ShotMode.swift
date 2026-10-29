@@ -143,15 +143,28 @@ enum ShotOverlays {
         case "record-bar":
             var model = RecordBarModel()
             let _ = model.windowID = 7
-            RecordBar(model: .constant(model), windows: [PickableWindow(id: 7, app: "Safari", title: "sdusteric.dev",
-                                                                       frame: .zero, displayID: 1)],
-                      shortcut: HotkeyCombo.defaultRecord.displayString, record: {}, cancel: {})
-                .padding(.top, 24)
+            ZStack(alignment: .top) {
+                // The tape around the chosen window, here the editor's stage.
+                WindowHighlightView().frame(width: 1000, height: 600).padding(.top, 150)
+                RecordBar(model: .constant(model), windows: [PickableWindow(id: 7, app: "Safari", title: "sdusteric.dev",
+                                                                           frame: .zero, displayID: 1)],
+                          shortcut: HotkeyCombo.defaultRecord.displayString, record: {}, cancel: {})
+                    .padding(.top, 24)
+            }
+        case "take-card":
+            ZStack(alignment: .bottomTrailing) {
+                Color.black.opacity(0.25)
+                TakeCardView(model: TakeCardModel(name: editor?.take.name ?? "Take", duration: editor?.take.duration ?? 48,
+                                                  zooms: editor?.take.zooms.count ?? 5, size: editor?.take.size ?? CGSize(width: 16, height: 9)),
+                             poster: footage.map { Image(decorative: $0, scale: 1) }, edit: {}, export: {}, close: {})
+                    .padding(TakeCardModel.edgeInset)
+            }
         case "countdown":
             CountdownView(number: 2).frame(maxWidth: .infinity, maxHeight: .infinity)
         case "settings":
             let now = Date(timeIntervalSince1970: 1_800_000_000)
-            let model = SettingsScreenModel(settings: DollyCore.Settings(), showsAdvanced: true, takesFolder: "~/Movies/Dolly")
+            let model = SettingsScreenModel(settings: DollyCore.Settings(), showsAdvanced: true, takesFolder: "~/Movies/Dolly/Takes",
+                                            defaultClipsFolder: NSHomeDirectory() + "/Movies/Dolly")
             let _ = model.lastClick = (CGPoint(x: 512, y: 300), now.addingTimeInterval(-0.4))
             ZStack {
                 Color.black.opacity(0.25)

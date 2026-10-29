@@ -9,4 +9,12 @@ import Testing
         let panel = KeyablePanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
         #expect(panel.canBecomeKey)
     }
+
+    /// The tape around the chosen window must never catch a click or take focus from the bar.
+    @Test func windowHighlightIsClickThrough() {
+        let panel = WindowHighlight.makePanel()
+        #expect(panel.ignoresMouseEvents)
+        #expect(!panel.canBecomeKey)
+        #expect(panel.level == .floating)
+    }
 }

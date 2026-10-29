@@ -15,6 +15,12 @@ nonisolated public struct RecordBarModel: Sendable {
 
     public var canRecord: Bool { target != .window || windowID != nil }
 
+    /// Each time the bar opens it picks the window the owner was looking at: the frontmost app's top
+    /// window, or the top window when Dolly itself is in front. `windows` is ordered front to back.
+    public mutating func prepare(windows: [PickableWindow], frontmostPID: Int32?) {
+        windowID = (windows.first { $0.pid == frontmostPID } ?? windows.first)?.id
+    }
+
     public static func label(_ target: TargetKind) -> String {
         switch target {
         case .window: "Window"

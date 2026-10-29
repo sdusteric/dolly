@@ -1,4 +1,5 @@
 import DollyCore
+import Foundation
 import Testing
 @testable import DollyUI
 
@@ -15,5 +16,18 @@ import Testing
     @Test func advancedShowsOnlyWithOption() {
         #expect(AdvancedSettingsModel.showsAdvanced(optionHeld: true))
         #expect(!AdvancedSettingsModel.showsAdvanced(optionHeld: false))
+    }
+}
+
+@MainActor @Suite struct ClipsFolderTests {
+    @Test func rowShowsTheChosenFolderOrTheDefault() {
+        let model = SettingsScreenModel(settings: DollyCore.Settings(), showsAdvanced: false, takesFolder: "~/Movies/Dolly/Takes",
+                                        defaultClipsFolder: NSHomeDirectory() + "/Movies/Dolly")
+        #expect(model.clipsFolder == "~/Movies/Dolly")
+        var saved: String?
+        model.onClipsFolder = { saved = $0 }
+        model.setClipsFolder("/Volumes/Work/Clips")
+        #expect(model.clipsFolder == "/Volumes/Work/Clips")
+        #expect(saved == "/Volumes/Work/Clips")
     }
 }

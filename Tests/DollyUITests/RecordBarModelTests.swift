@@ -1,3 +1,4 @@
+import CoreGraphics
 import Testing
 @testable import DollyCore
 @testable import DollyUI
@@ -33,7 +34,54 @@ import Testing
         #expect(m.canRecord)
     }
 
+    private func window(_ id: UInt32, _ app: String, pid: Int32) -> PickableWindow {
+        PickableWindow(id: id, app: app, title: "", frame: .zero, displayID: 1, pid: pid)
+    }
+
+    @Test func windowsListFrontToBack() {
+        let windows = [window(1, "Notes", pid: 10), window(2, "Safari", pid: 20), window(3, "Xcode", pid: 30)]
+        let ordered = PickableWindow.frontToBack(windows, order: [99, 3, 1, 2])
+        #expect(ordered.map(\.id) == [3, 1, 2])
+        // A window missing from the order goes last instead of disappearing.
+        #expect(PickableWindow.frontToBack(windows, order: [2]).map(\.id) == [2, 1, 3])
+    }
+
+    @Test func barPicksTheFrontmostAppsTopWindow() {
+        var m = RecordBarModel()
+        m.prepare(windows: [window(5, "Xcode", pid: 30), window(6, "Safari", pid: 20), window(7, "Safari", pid: 20)], frontmostPID: 20)
+        #expect(m.windowID == 6)
+    }
+
+    @Test func barFallsBackToTheTopWindowWhenDollyIsInFront() {
+        var m = RecordBarModel()
+        m.windowID = 99
+        m.prepare(windows: [window(5, "Xcode", pid: 30), window(6, "Safari", pid: 20)], frontmostPID: 1)
+        #expect(m.windowID == 5)
+        m.prepare(windows: [], frontmostPID: 20)
+        #expect(m.windowID == nil)
+    }
+
     @Test func permissionCopy() {
         #expect(PermissionWindowModel.message == "Dolly needs Screen Recording to record your screen. It never records until you press Record.")
+    }
+}
+
+@Suite struct TakeCardModelTests {
+    @Test func metaCountsTheZooms() {
+        #expect(TakeCardModel(name: "Demo", duration: 42.4, zooms: 3, size: CGSize(width: 1600, height: 900)).meta == "3 zooms")
+        #expect(TakeCardModel(name: "Demo", duration: 5, zooms: 1, size: .zero).meta == "1 zoom")
+        #expect(TakeCardModel(name: "Demo", duration: 5, zooms: 0, size: .zero).meta == "No zooms")
+    }
+
+    @Test func posterKeepsTheTakeShapeWithinLimits() {
+        #expect(TakeCardModel(name: "", duration: 1, zooms: 0, size: CGSize(width: 1600, height: 900)).posterSize == CGSize(width: 240, height: 135))
+        // A tall window stops at a square; a very wide strip stops at 96 pt.
+        #expect(TakeCardModel(name: "", duration: 1, zooms: 0, size: CGSize(width: 600, height: 1200)).posterSize.height == 240)
+        #expect(TakeCardModel(name: "", duration: 1, zooms: 0, size: CGSize(width: 3000, height: 200)).posterSize.height == 96)
+    }
+
+    @Test func cardSitsInTheBottomRightCorner() {
+        let origin = TakeCardModel.origin(cardSize: CGSize(width: 260, height: 300), visibleFrame: CGRect(x: 0, y: 40, width: 1440, height: 835))
+        #expect(origin == CGPoint(x: 1440 - 16 - 260, y: 56))
     }
 }

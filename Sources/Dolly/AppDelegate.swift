@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
     private var settingsWindow: NSWindow?
     private var settingsModel: SettingsScreenModel?
     private let probe = ClickProbe()
+    private let takeCard = TakeCard()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let settings: DollyCore.Settings
@@ -31,6 +32,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         let recording = RecordingWiring(paths: paths, settings: settings)
         editor.onRecord = { [weak recording] in recording?.hotkeyPressed() }
         recording.onTake = { [weak editor] take in editor?.received(take) }
+        editor.onReceived = { [weak self, weak editor] take, poster in
+            let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }
+            self?.takeCard.show(TakeCardModel(take: take), poster: poster, on: screen,
+                                edit: { editor?.showTake(take.id, export: false) },
+                                export: { editor?.showTake(take.id, export: true) })
+        }
         editor.recordingFolder = { [weak recording] in recording?.currentFolder }
         self.editor = editor
         self.recording = recording
@@ -101,10 +108,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         guard let editor else { return }
         let advanced = AdvancedSettingsModel.showsAdvanced(optionHeld: NSEvent.modifierFlags.contains(.option))
         let model = settingsModel ?? SettingsScreenModel(settings: editor.settings, showsAdvanced: advanced,
-                                                         takesFolder: (paths.takesFolder.path(percentEncoded: false) as NSString).abbreviatingWithTildeInPath)
+                                                         takesFolder: (paths.takesFolder.path(percentEncoded: false) as NSString).abbreviatingWithTildeInPath,
+                                                         defaultClipsFolder: paths.exportsFolder.path(percentEncoded: false))
         model.settings = editor.settings
         model.showsAdvanced = advanced
         model.revealTakes = { [paths] in NSWorkspace.shared.activateFileViewerSelecting([paths.takesFolder]) }
+        model.revealClips = { [weak model] in
+            guard let model else { return }
+            let url = URL(filePath: model.settings.exportsFolder ?? model.defaultClipsFolder, directoryHint: .isDirectory)
+            try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        }
+        model.onClipsFolder = { [weak self] path in self?.editor?.setExportsFolder(path) }
+        model.chooseClipsFolder = { [weak self, weak model] in
+            guard let model, let window = self?.settingsWindow else { return }
+            let panel = NSOpenPanel()
+            panel.canChooseDirectories = true
+            panel.canChooseFiles = false
+            panel.canCreateDirectories = true
+            panel.directoryURL = URL(filePath: model.settings.exportsFolder ?? model.defaultClipsFolder, directoryHint: .isDirectory)
+            panel.prompt = "Choose"
+            panel.beginSheetModal(for: window) { response in
+                guard response == .OK, let url = panel.url else { return }
+                model.setClipsFolder(url.path(percentEncoded: false))
+            }
+        }
         model.onChange = { [weak self] settings in
             guard let self else { return }
             self.editor?.apply(settings)

@@ -94,6 +94,12 @@ nonisolated public enum Theme {
         public static let poster = CGSize(width: 56, height: 40)
         public static let windowMinimum = CGSize(width: 1100, height: 720)
         public static let focusRing: CGFloat = 2
+        /// The tape outline on the window the Record bar will record.
+        public static let targetStroke: CGFloat = 3
+        public static let targetRadius: CGFloat = 12
+        /// The corner card after a recording: how far it slides in, and the clear room for its shadow.
+        public static let cardSlide: CGFloat = 16
+        public static let cardShadowRoom: CGFloat = 24
     }
 
     public enum Font {
@@ -110,6 +116,9 @@ nonisolated public enum Theme {
         public static let stripBridge = 0.16
         public static let countdown = 0.2
         public static let saved = 0.16
+        /// The corner card enters from the screen edge and leaves the same way.
+        public static let cardIn = 0.24
+        public static let cardOut = 0.18
     }
 
     /// WCAG contrast ratio of two colors.

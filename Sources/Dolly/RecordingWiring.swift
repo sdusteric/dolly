@@ -16,6 +16,7 @@ final class RecordingWiring {
     private var settings: DollyCore.Settings
     private let shortcut: String
     private let areaPicker = AreaPicker()
+    private let highlight = WindowHighlight()
     private var barPanel: KeyablePanel?
     private var sleepObserver: NSObjectProtocol?
     /// The Advanced switches the current controller was built with.
@@ -103,8 +104,11 @@ final class RecordingWiring {
 
     private func openBar() {
         guard PermissionProbe.preflight() else { return showPermission(denied: false) }
+        // Read before the bar shows; the bar never activates Dolly, but the editor might be in front.
+        let frontmost = NSWorkspace.shared.frontmostApplication?.processIdentifier
         Task {
             windows = await WindowCatalog.windows()
+            bar.prepare(windows: windows, frontmostPID: frontmost)
             showBar()
         }
     }
@@ -113,6 +117,7 @@ final class RecordingWiring {
 
     private func showBar() {
         barPanel?.orderOut(nil)
+        highlight.show(bar.target == .window ? windows.first { $0.id == bar.windowID }?.frame : nil)
         let binding = Binding(get: { self.bar }, set: { self.bar = $0; self.showBar() })
         let view = RecordBar(model: binding, windows: windows, shortcut: shortcut,
                              record: { [weak self] in self?.record() }, cancel: { [weak self] in self?.closeBar() })
@@ -132,6 +137,7 @@ final class RecordingWiring {
     }
 
     private func closeBar() {
+        highlight.hide()
         barPanel?.orderOut(nil)
         barPanel = nil
     }

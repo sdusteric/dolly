@@ -108,7 +108,11 @@ final class EditorController: NSObject, NSWindowDelegate {
         showWindow()
     }
 
-    /// A new take from the recorder: give it the saved look, a poster, then open it.
+    /// A new take from the recorder: give it the saved look and a poster, load it, then hand it to
+    /// the corner card. The editor window comes forward only from the card, so a recording never
+    /// steals focus from the app the owner is in.
+    var onReceived: (Take, NSImage?) -> Void = { _, _ in }
+
     func received(_ take: Take) {
         var take = take
         if take.look == Look(), settings.defaultLook != Look() {
@@ -120,8 +124,16 @@ final class EditorController: NSObject, NSWindowDelegate {
             await makePoster(take, folder: folder)
             reloadTakes()
             open(folder: folder)
-            showWindow()
+            onReceived(take, NSImage(contentsOf: folder.appending(path: TakeStore.posterName)))
         }
+    }
+
+    /// From the corner card: the take it shows, in the editor, optionally straight into Export.
+    func showTake(_ id: UUID, export: Bool) {
+        let folder = store.folder(for: id)
+        if session.folder?.standardizedFileURL != folder.standardizedFileURL { open(folder: folder) }
+        showWindow()
+        if export { showExport() }
     }
 
     /// Reads the take from disk (TakeSession), so reopening one keeps its saved edits.
@@ -207,6 +219,12 @@ final class EditorController: NSObject, NSWindowDelegate {
         self.settings.advanced = settings.advanced
         saveSettings()
         if shelfChanged { writeShelfStatus() }
+    }
+
+    /// The clips folder from Settings; the export sheet's Change… sets the same value.
+    func setExportsFolder(_ path: String) {
+        settings.exportsFolder = path
+        saveSettings()
     }
 
     private func useForNewTakes(_ look: Look) {

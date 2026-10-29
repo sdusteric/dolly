@@ -20,15 +20,32 @@ public final class SettingsScreenModel {
     public var settings: DollyCore.Settings
     public var showsAdvanced: Bool
     public var takesFolder: String
+    /// Where exports go when the owner has not chosen a folder.
+    public var defaultClipsFolder: String
     /// The last click the probe saw: global point and when.
     public var lastClick: (point: CGPoint, at: Date)?
     @ObservationIgnored public var onChange: (DollyCore.Settings) -> Void = { _ in }
     @ObservationIgnored public var revealTakes: () -> Void = {}
+    @ObservationIgnored public var revealClips: () -> Void = {}
+    /// Asks for a folder; the app answers through `setClipsFolder`.
+    @ObservationIgnored public var chooseClipsFolder: () -> Void = {}
+    @ObservationIgnored public var onClipsFolder: (String) -> Void = { _ in }
 
-    public init(settings: DollyCore.Settings, showsAdvanced: Bool, takesFolder: String) {
+    public init(settings: DollyCore.Settings, showsAdvanced: Bool, takesFolder: String, defaultClipsFolder: String) {
         self.settings = settings
         self.showsAdvanced = showsAdvanced
         self.takesFolder = takesFolder
+        self.defaultClipsFolder = defaultClipsFolder
+    }
+
+    /// The export folder as the row shows it, with `~` for the home folder.
+    public var clipsFolder: String {
+        (settings.exportsFolder ?? defaultClipsFolder).abbreviatingHome
+    }
+
+    public func setClipsFolder(_ path: String) {
+        settings.exportsFolder = path
+        onClipsFolder(path)
     }
 
     func update(_ change: (inout DollyCore.Settings) -> Void) {
@@ -43,6 +60,10 @@ public final class SettingsScreenModel {
             source: settings.advanced.clickSource
         )
     }
+}
+
+nonisolated extension String {
+    var abbreviatingHome: String { (self as NSString).abbreviatingWithTildeInPath }
 }
 
 /// Dolly > Settings (⌘,). Advanced appears only when the window opens with Option held.
@@ -84,6 +105,14 @@ public struct SettingsView: View {
             }
             row("Show in Shelf", note: "Shelf shows the poster of your newest export.") {
                 toggle(model.settings.showInShelf) { on in model.update { $0.showInShelf = on } }
+            }
+            row("Clips", note: "Dolly saves exports for X and Threads here.") {
+                HStack(spacing: 12) {
+                    Text(model.clipsFolder).foregroundStyle(Theme.muted.color).lineLimit(1).truncationMode(.middle)
+                    Spacer(minLength: 0)
+                    Button("Change…", action: model.chooseClipsFolder).buttonStyle(DollyButtonStyle())
+                    Button("Show in Finder", action: model.revealClips).buttonStyle(DollyButtonStyle())
+                }
             }
             row("Takes") {
                 HStack(spacing: 12) {

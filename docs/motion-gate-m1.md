@@ -29,3 +29,15 @@ uses `Theme.Motion` and drops to opacity only or nothing under Reduce Motion.
 M1 already has the motion it needs: press feedback, one bridge for things that appear in lists, and
 the countdown. The highest-leverage item is the zoom strip bridge, because it is the one place where
 an edit (Z, Delete, undo) would otherwise make a strip blink in or out under the pointer.
+
+## After M1: window outline, take card, Clips row (2026-10-29)
+
+| Location | Motion | Purpose | Frequency | Values |
+|---|---|---|---|---|
+| `Record/TakeCard.swift` (`TakeCardHost`) | Card slides in from the right screen edge, leaves the same way; Edit and Export close it at once | Spatial consistency | Once per recording | In `Theme.Motion.cardIn` 0.24 s ease-out, out `Theme.Motion.cardOut` 0.18 s ease-in, 16 pt (`Theme.Size.cardSlide`) plus opacity; opacity only with Reduce Motion |
+
+Rejected:
+
+- Window outline appearing or moving to a new choice (`Record/WindowHighlight.swift`): it opens with the hotkey, and it marks what will be recorded, so it must be readable at once. Frequency and function.
+- Press feedback on the card's poster and close button: the editor opening, or the card leaving, is the feedback. Purpose.
+- The Clips path changing after Change…: the system folder sheet already bridges it. Purpose.
