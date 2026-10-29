@@ -41,6 +41,7 @@ public final class RecordingController {
     @ObservationIgnored private var sideStarts: [Side: Double] = [:]
     @ObservationIgnored private var sideFailures: [Side: Double] = [:]
     @ObservationIgnored private var sideNotes: [String] = []
+    @ObservationIgnored private var sideStartTask: Task<Void, Never>?
 
     public init(store: TakeStore, source: any RecordingSource, pointer: any PointerSampling, clock: any DollyClock,
                 disk: any DiskSpaceProbing, rules: ZoomRules, namer: any ZoomNaming = FallbackZoomNamer(),
@@ -101,22 +102,43 @@ public final class RecordingController {
             state = .failed(Self.couldNotStartMessage)
             return
         }
-        // The screen runs first; a camera or microphone that cannot start is noted and left out.
-        for (side, deviceID) in [(Side.camera, plan.cameraID), (.microphone, plan.microphoneID)] {
-            guard let deviceID, let device = sides[side] else { continue }
-            let url = folder.appending(path: side == .camera ? Self.cameraFile : TakeStore.audioName)
-            do {
-                sideStarts[side] = try await device.start(deviceID: deviceID, url: url) { [weak self] failure in
-                    Task { @MainActor in self?.sideFailures[side] = self?.sideFailures[side] ?? failure.hostTime }
-                }
-            } catch {
-                sideNotes.append("The \(side.rawValue) did not start")
-                try? FileManager.default.removeItem(at: url)
-            }
-        }
         self.plan = plan
         takeID = id
         state = .recording(since: clock.now())
+        // The screen is recording; the camera and microphone open together beside it. One that
+        // cannot start is stopped, noted and left out.
+        let task = Task { await startSides(plan, folder: folder) }
+        sideStartTask = task
+        await task.value
+    }
+
+    private func startSides(_ plan: RecordingPlan, folder: URL) async {
+        let wanted = [(Side.camera, plan.cameraID), (.microphone, plan.microphoneID)].compactMap { side, id in
+            id.flatMap { id in sides[side].map { (side, id, $0) } }
+        }
+        let results = await withTaskGroup(of: (Side, Double?).self) { group in
+            for (side, deviceID, device) in wanted {
+                let url = folder.appending(path: side == .camera ? Self.cameraFile : TakeStore.audioName)
+                group.addTask { [weak self] in
+                    do {
+                        let first = try await device.start(deviceID: deviceID, url: url) { failure in
+                            Task { @MainActor in self?.sideFailures[side] = self?.sideFailures[side] ?? failure.hostTime }
+                        }
+                        return (side, first)
+                    } catch {
+                        try? await device.stop()
+                        try? FileManager.default.removeItem(at: url)
+                        return (side, nil)
+                    }
+                }
+            }
+            var collected: [(Side, Double?)] = []
+            for await result in group { collected.append(result) }
+            return collected
+        }
+        for (side, first) in results.sorted(by: { $0.0.rawValue < $1.0.rawValue }) {
+            if let first { sideStarts[side] = first } else { sideNotes.append("The \(side.rawValue) did not start") }
+        }
     }
 
     /// The hotkey during 3, 2, 1: nothing is recorded.
@@ -148,6 +170,9 @@ public final class RecordingController {
             takeID = nil
         }
         let folder = store.folder(for: id)
+        // A stop that comes while the camera or microphone is still opening waits for it.
+        await sideStartTask?.value
+        sideStartTask = nil
         var notes = reason.note.map { [$0] } ?? []
         // The screen stops first, so a pointer log error can never leave it recording.
         let result: RecordingResult

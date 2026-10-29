@@ -140,6 +140,8 @@ final class CaptureRecorder: NSObject, AVCaptureVideoDataOutputSampleBufferDeleg
         let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
         let host = session.synchronizationClock.map { CMSyncConvertTime(pts, from: $0, to: CMClockGetHostTimeClock()) } ?? pts
         if writer.status == .unknown {
+            // A first sample after `start` gave up (or after `stop`) writes nothing.
+            guard withState({ $0.first != nil }) else { return }
             guard writer.startWriting() else {
                 resumeFirst(with: .failure(writer.error ?? RecordingSourceError.couldNotStart("writer")))
                 return
@@ -153,23 +155,36 @@ final class CaptureRecorder: NSObject, AVCaptureVideoDataOutputSampleBufferDeleg
         }
     }
 
+    /// Stops the device and closes the file. The writer is taken out of `state` and finished on
+    /// `queue`, the delegate's queue, so no sample can be appended after `markAsFinished`.
     func stop() async throws {
-        let (session, writer, input, observers) = withState { s in
+        let observers = withState { s in
             defer {
                 s.failed = nil
                 s.observers = []
             }
-            return (s.session, s.writer, s.input, s.observers)
+            return s.observers
         }
         observers.forEach(NotificationCenter.default.removeObserver)
-        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
-            queue.async {
+        resumeFirst(with: .failure(CancellationError()))
+        let writer: AVAssetWriter? = await withCheckedContinuation { done in
+            queue.async { [weak self] in
+                guard let self else { return done.resume(returning: nil) }
+                let (session, writer, input) = withState { s in
+                    defer {
+                        s.session = nil
+                        s.writer = nil
+                        s.input = nil
+                    }
+                    return (s.session, s.writer, s.input)
+                }
                 session?.stopRunning()
-                done.resume()
+                guard let writer, let input, writer.status == .writing else { return done.resume(returning: nil) }
+                input.markAsFinished()
+                done.resume(returning: writer)
             }
         }
-        guard let writer, let input, writer.status == .writing else { return }
-        input.markAsFinished()
+        guard let writer else { return }
         await writer.finishWriting()
         if writer.status != .completed { throw writer.error ?? CocoaError(.fileWriteUnknown) }
     }

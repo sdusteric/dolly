@@ -38,4 +38,19 @@ import Testing
         try session.save()
         #expect(try store.load(folderA).zooms.first?.depth == 2.5)
     }
+
+    /// Review finding 5: a take whose picture is gone opens with the default color, so the Look tab
+    /// shows what the clip shows.
+    @Test func missingPictureOpensAsDefaultColor() throws {
+        let home = FileManager.default.temporaryDirectory.appending(path: "dolly-session-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: home) }
+        let store = TakeStore(paths: DollyPaths(environment: ["DOLLY_HOME": home.path]))
+        var take = SyntheticTake.shelfDemo()
+        take.look.background = .picture(file: "backdrop.jpg", blur: 4)
+        let folder = try store.createFolder(for: take.id)
+        try store.save(take)
+        let editor = try TakeSession(store: store).open(folder: folder)
+        #expect(editor.take.look.background == Look.defaultBackground)
+        #expect(!editor.canUndo)
+    }
 }

@@ -137,9 +137,11 @@ final class FakePointerSampler: PointerSampling, @unchecked Sendable {
     }
 
     func sideController(camera: FakeSideSource?, microphone: FakeSideSource? = nil) -> RecordingController {
-        RecordingController(store: store, source: FakeRecordingSource(options: .init(seconds: 1, startHost: 100)),
+        let c = RecordingController(store: store, source: FakeRecordingSource(options: .init(seconds: 1, startHost: 100)),
                             pointer: FakePointerSampler(), clock: FakeClock(), disk: FakeDiskSpace(bytes: 50_000_000_000),
                             rules: ZoomRules(), camera: camera, microphone: microphone)
+        camera?.report = { [weak c] in c.map { if case .recording = $0.state { "recording" } else { "\($0.state)" } } ?? "" }
+        return c
     }
 
     var sidePlan: RecordingPlan {
@@ -186,6 +188,29 @@ final class FakePointerSampler: PointerSampling, @unchecked Sendable {
         let take = try #require(await c.requestStop(hostTime: 125))
         #expect(take.notes.contains("The camera stopped at 0:21.4"))
         #expect(take.camera != nil)
+    }
+
+    /// Review finding 2: a camera that fails to start is told to stop, so it never stays open.
+    @Test func sideSourceThatCannotStartIsStopped() async throws {
+        defer { try? FileManager.default.removeItem(at: home) }
+        let camera = FakeSideSource(firstHost: 100, failsToStart: true)
+        let c = sideController(camera: camera)
+        await c.start(plan: sidePlan)
+        #expect(camera.stopped)
+        _ = await c.requestStop(hostTime: 101)
+    }
+
+    /// Review finding 3: the camera and microphone open together, after the screen is recording.
+    @Test func sidesStartTogetherWhileRecording() async throws {
+        defer { try? FileManager.default.removeItem(at: home) }
+        let microphone = FakeSideSource(firstHost: 100)
+        let camera = FakeSideSource(firstHost: 100.2, waitsFor: microphone)
+        let c = sideController(camera: camera, microphone: microphone)
+        await c.start(plan: sidePlan)
+        let take = try #require(await c.requestStop(hostTime: 101))
+        #expect(camera.sawPeerStart)
+        #expect(camera.stateAtStart == "recording")
+        #expect(take.camera != nil && take.microphoneOffset != nil)
     }
 
     @Test func sideSourceThatCannotStartIsDropped() async throws {

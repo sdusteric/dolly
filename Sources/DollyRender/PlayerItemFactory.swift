@@ -26,7 +26,8 @@ public enum PlayerItemFactory {
         try track.insertTimeRange(range, of: video, at: .zero)
         let microphone = folder.appending(path: TakeStore.audioName)
         if let offset = take.microphoneOffset, FileManager.default.fileExists(atPath: microphone.path(percentEncoded: false)) {
-            _ = try await insertSide(microphone, type: .audio, offset: offset, trim: start...end, into: composition)
+            _ = try await insertSide(microphone, type: .audio, offset: offset, trim: start...end, limit: range.duration,
+                                     into: composition)
         } else if let audio = try await source.loadTracks(withMediaType: .audio).first,
                   let audioTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) {
             try audioTrack.insertTimeRange(range, of: audio, at: .zero)
@@ -34,7 +35,7 @@ public enum PlayerItemFactory {
         var webcam: (trackID: CMPersistentTrackID, track: CameraTrack)?
         if let camera = take.camera,
            let id = try await insertSide(folder.appending(path: camera.file), type: .video, offset: camera.startOffset,
-                                         trim: start...end, into: composition) {
+                                         trim: start...end, limit: range.duration, into: composition) {
             webcam = (id, camera)
         }
 
@@ -58,9 +59,10 @@ public enum PlayerItemFactory {
     }
 
     /// Puts the part of a side file (the webcam or the microphone) that falls inside the trim into
-    /// the composition, where file time 0 is `offset` seconds into the take. A missing or unreadable
-    /// file adds nothing, so the take still plays and exports.
-    static func insertSide(_ url: URL, type: AVMediaType, offset: Double, trim: ClosedRange<Double>,
+    /// the composition, where file time 0 is `offset` seconds into the take. It never runs past
+    /// `limit`, the trimmed video's length, which the one compositor instruction covers. A missing,
+    /// unreadable or odd file adds nothing, so the take still plays and exports.
+    static func insertSide(_ url: URL, type: AVMediaType, offset: Double, trim: ClosedRange<Double>, limit: CMTime,
                            into composition: AVMutableComposition) async throws -> CMPersistentTrackID? {
         guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else { return nil }
         let asset = AVURLAsset(url: url)
@@ -70,8 +72,19 @@ public enum PlayerItemFactory {
         guard to > from, let track = composition.addMutableTrack(withMediaType: type, preferredTrackID: kCMPersistentTrackID_Invalid) else {
             return nil
         }
-        let range = CMTimeRange(start: CMTime(seconds: from, preferredTimescale: 600), end: CMTime(seconds: to, preferredTimescale: 600))
-        try track.insertTimeRange(range, of: sourceTrack, at: CMTime(seconds: max(offset - trim.lowerBound, 0), preferredTimescale: 600))
+        let at = CMTime(seconds: max(offset - trim.lowerBound, 0), preferredTimescale: 600)
+        let duration = CMTimeMinimum(CMTime(seconds: to - from, preferredTimescale: 600), CMTimeSubtract(limit, at))
+        guard duration > .zero else {
+            composition.removeTrack(track)
+            return nil
+        }
+        do {
+            try track.insertTimeRange(CMTimeRange(start: CMTime(seconds: from, preferredTimescale: 600), duration: duration),
+                                      of: sourceTrack, at: at)
+        } catch {
+            composition.removeTrack(track)
+            return nil
+        }
         return track.trackID
     }
 }

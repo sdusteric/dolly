@@ -117,21 +117,25 @@ struct CaptionsTab: View {
                 .background(box.fill(Theme.sheet.color))
                 .overlay(box.strokeBorder(editing ? Theme.ink.color : Theme.control.color, lineWidth: 1))
                 .onAppear { text = caption.text }
-                .onChange(of: caption.id) { old, _ in
-                    commit(old)
-                    text = caption.text
-                }
-                .onChange(of: caption.text) { if !editing { text = caption.text } }
-                .onChange(of: editing) { if !editing { commit(caption.id) } }
+                // Words reach the take as they are typed, so preview, autosave and Export see them;
+                // one stretch of typing is one undo step.
+                .onChange(of: text) { if editing, text != caption.text { editor.editCaption(caption.id, text: text) } }
+                .onChange(of: caption.id) { text = caption.text }
+                .onChange(of: caption.text) { if caption.text != text { text = caption.text } }
+                .onChange(of: editing) { editing ? editor.beginGesture() : editor.endGesture() }
+                .onDisappear { if editing { editor.endGesture() } }
                 .onKeyPress(.return) {
-                    commit(caption.id)
-                    editor.splitCaption(caption.id, at: cursorOffset ?? text.count)
+                    let at = cursorOffset ?? text.count
+                    editor.endGesture()
+                    editor.splitCaption(caption.id, at: at)
+                    editor.beginGesture()
                     return .handled
                 }
                 .onKeyPress(.delete) {
                     guard cursorOffset == 0 else { return .ignored }
-                    commit(caption.id)
+                    editor.endGesture()
                     editor.joinCaption(caption.id)
+                    editor.beginGesture()
                     return .handled
                 }
                 .accessibilityLabel("Caption text")
@@ -142,9 +146,5 @@ struct CaptionsTab: View {
     private var cursorOffset: Int? {
         guard case .selection(let range) = cursor?.indices, range.isEmpty, range.lowerBound <= text.endIndex else { return nil }
         return text.distance(from: text.startIndex, to: range.lowerBound)
-    }
-
-    private func commit(_ id: Caption.ID) {
-        if let current = editor.caption(id), current.text != text { editor.editCaption(id, text: text) }
     }
 }

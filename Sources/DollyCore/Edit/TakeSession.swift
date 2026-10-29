@@ -15,7 +15,9 @@ public final class TakeSession {
     @discardableResult
     public func open(folder: URL) throws -> EditorModel {
         try save()
-        let take = try store.load(folder)
+        var take = try store.load(folder)
+        // A picture that is gone draws the default color; the editor shows that too.
+        take.look = take.look.resolved(in: folder)
         let editor = EditorModel(take: take, pointer: TakeInputs.pointerPath(take: take, folder: folder))
         self.editor = editor
         self.folder = folder

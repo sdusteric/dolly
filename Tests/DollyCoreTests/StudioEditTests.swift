@@ -116,4 +116,16 @@ import Testing
         model.select(nil)
         #expect(model.selection == nil)
     }
+
+    /// Review finding 8: the caption field writes each keystroke into the take inside one gesture,
+    /// so the take always has the words and undo takes back the whole stretch of typing.
+    @Test func typingIsLiveAndOneUndoStep() {
+        let first = id(0)
+        model.beginGesture()
+        for text in ["T", "Ty", "Typed"] { model.editCaption(first, text: text) }
+        #expect(items[0].text == "Typed")
+        model.endGesture()
+        model.undo()
+        #expect(items[0].text == "This is Shelf, my launcher for every app.")
+    }
 }

@@ -126,4 +126,26 @@ func bitmap(_ image: CIImage) -> [UInt8] {
         #expect(p.pixelSize == PixelSize(width: 1080, height: 1920))
         #expect(abs(p.durationSeconds - 3.0) <= 1.0 / 30 + 0.03)
     }
+
+    /// Review finding 1: side tracks inserted from rounded times can run past the trimmed video,
+    /// and AVAssetReader then refuses the composition.
+    @Test func trimmedExportWithSideFilesSucceeds() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "dolly-trim-export-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let folder = root.appending(path: "take"), out = root.appending(path: "out")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try await SyntheticTake.writeMovie(seconds: 3, fps: 60, variableRate: false, to: folder.appending(path: TakeStore.movieName))
+        try await SyntheticTake.writeCamera(to: folder.appending(path: "camera.mov"), seconds: 3, color: (220, 40, 40))
+        try SyntheticTake.writeTone(to: folder.appending(path: TakeStore.audioName), seconds: 3)
+        for (trim, cameraOffset, micOffset) in [(0.3337...2.7071, 0.1371, 0.0731), (0.9113...2.2229, 0.0123, 0.4567), (0.25...2.9, 0.1, -0.05)] {
+            var take = Take(name: "Trim", target: .display, size: CGSize(width: 1440, height: 900), pixelScale: 1, fps: 60, duration: 3)
+            take.trim = trim
+            take.camera = CameraTrack(startOffset: cameraOffset)
+            take.microphoneOffset = micOffset
+            let url = try await Exporter().export(ExportPlan(take: take, shape: .wide16x9, fps: 30, folder: out), takeFolder: folder,
+                                                  pointer: nil, progress: { _ in })
+            let p = await VideoProbe.probe(url)
+            #expect(p.audioTrackCount == 1 && abs(p.durationSeconds - (trim.upperBound - trim.lowerBound)) <= 1.0 / 30 + 0.03)
+        }
+    }
 }

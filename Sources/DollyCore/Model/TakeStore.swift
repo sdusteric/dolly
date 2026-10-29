@@ -94,19 +94,50 @@ public final class TakeStore: Sendable {
         return total
     }
 
-    /// Copies a picture into the take folder as `backdrop.<ext>`, so the take still opens after the
-    /// original moves, and removes any older backdrop. Returns the new file name.
+    /// Copies a picture into the take folder as `backdrop.<ext>` (then `backdrop 2.<ext>` and on), so
+    /// the take still opens after the original moves. Older pictures stay, so undo can go back to
+    /// them. Returns the new file name.
     public func importBackdrop(_ source: URL, into folder: URL) throws -> String {
-        let ext = source.pathExtension.lowercased()
-        let name = "backdrop." + (ext.isEmpty ? "jpg" : ext)
+        let ext = source.pathExtension.lowercased().isEmpty ? "jpg" : source.pathExtension.lowercased()
         let manager = FileManager.default
+        let taken = Set(try manager.contentsOfDirectory(atPath: folder.path(percentEncoded: false)).map { $0.lowercased() })
+        var name = "backdrop.\(ext)"
+        var n = 2
+        while taken.contains(name) {
+            name = "backdrop \(n).\(ext)"
+            n += 1
+        }
         let staged = folder.appending(path: ".backdrop-\(UUID().uuidString)")
         try manager.copyItem(at: source, to: staged)
-        for old in try manager.contentsOfDirectory(atPath: folder.path(percentEncoded: false)) where old.hasPrefix("backdrop.") {
-            try manager.removeItem(at: folder.appending(path: old))
-        }
         try manager.moveItem(at: staged, to: folder.appending(path: name))
         return name
+    }
+
+    /// "Use for new takes" with a picture: keeps a copy of it outside the take, so new takes can get
+    /// their own. Returns the look to save as the default.
+    public func saveDefaultBackdrop(_ look: Look, from folder: URL) throws -> Look {
+        guard case .picture(let file, _) = look.background else { return look }
+        let source = folder.appending(path: file)
+        let target = paths.defaultBackdropURL(ext: source.pathExtension.lowercased())
+        let manager = FileManager.default
+        try manager.createDirectory(at: paths.supportFolder, withIntermediateDirectories: true)
+        if manager.fileExists(atPath: target.path(percentEncoded: false)) { try manager.removeItem(at: target) }
+        try manager.copyItem(at: source, to: target)
+        return look
+    }
+
+    /// The default look for a new take in `folder`: its picture, if any, is copied in under a fresh
+    /// name; with no saved picture the take gets the default color instead of a missing file.
+    public func applyDefaultLook(_ look: Look, to folder: URL) throws -> Look {
+        guard case .picture(let file, let blur) = look.background else { return look }
+        var applied = look
+        let saved = paths.defaultBackdropURL(ext: URL(filePath: file).pathExtension.lowercased())
+        if FileManager.default.fileExists(atPath: saved.path(percentEncoded: false)) {
+            applied.background = .picture(file: try importBackdrop(saved, into: folder), blur: blur)
+        } else {
+            applied.background = Look.defaultBackground
+        }
+        return applied
     }
 
     static let encoder: JSONEncoder = {

@@ -77,16 +77,34 @@ import Testing
         #expect(ids == [newer.id, older.id])
     }
 
-    @Test func importBackdropReplacesOld() throws {
+    /// Review finding 6: each import gets its own name and older pictures stay, so undo can go back.
+    @Test func importBackdropKeepsOlderForUndo() throws {
         defer { try? FileManager.default.removeItem(at: home) }
         let folder = try store.createFolder(for: UUID())
-        let a = home.appending(path: "a.PNG"), b = home.appending(path: "b.jpg")
+        let a = home.appending(path: "a.PNG"), b = home.appending(path: "b.png")
         try Data([1]).write(to: a)
         try Data([2, 2]).write(to: b)
-        #expect(try store.importBackdrop(a, into: folder) == "backdrop.png")
-        #expect(try store.importBackdrop(b, into: folder) == "backdrop.jpg")
-        let names = try FileManager.default.contentsOfDirectory(atPath: folder.path).filter { $0.hasPrefix("backdrop") }
-        #expect(names == ["backdrop.jpg"])
-        #expect(try Data(contentsOf: folder.appending(path: "backdrop.jpg")) == Data([2, 2]))
+        let first = try store.importBackdrop(a, into: folder), second = try store.importBackdrop(b, into: folder)
+        #expect(first.hasPrefix("backdrop") && first.hasSuffix(".png") && second.hasSuffix(".png") && first != second)
+        #expect(try Data(contentsOf: folder.appending(path: first)) == Data([1]))
+        #expect(try Data(contentsOf: folder.appending(path: second)) == Data([2, 2]))
+    }
+
+    /// Review finding 7: a default look with a picture brings its own copy into each new take.
+    @Test func defaultPictureIsCopiedIntoNewTakes() throws {
+        defer { try? FileManager.default.removeItem(at: home) }
+        let source = try store.createFolder(for: UUID())
+        try Data([7]).write(to: source.appending(path: "backdrop.jpg"))
+        var look = Look()
+        look.background = .picture(file: "backdrop.jpg", blur: 12)
+        let saved = try store.saveDefaultBackdrop(look, from: source)
+        let target = try store.createFolder(for: UUID())
+        let applied = try store.applyDefaultLook(saved, to: target)
+        guard case .picture(let file, let blur) = applied.background else { Issue.record("\(applied.background)"); return }
+        let copied = try Data(contentsOf: target.appending(path: file))
+        #expect(blur == 12 && copied == Data([7]))
+        // Without a saved picture the new take gets the default color, never a missing file.
+        try FileManager.default.removeItem(at: paths.defaultBackdropURL(ext: "jpg"))
+        #expect(try store.applyDefaultLook(saved, to: target).background == Look.defaultBackground)
     }
 }

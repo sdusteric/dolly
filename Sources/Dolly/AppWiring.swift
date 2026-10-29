@@ -127,11 +127,17 @@ final class EditorController: NSObject, NSWindowDelegate {
 
     func received(_ take: Take) {
         var take = take
+        let folder = store.folder(for: take.id)
         if take.look == Look(), settings.defaultLook != Look() {
-            take.look = settings.defaultLook
+            do {
+                take.look = try store.applyDefaultLook(settings.defaultLook, to: folder)
+            } catch {
+                log.warning("default backdrop for \(take.id.uuidString) failed: \(error.localizedDescription)")
+                take.look = settings.defaultLook
+                take.look.background = settings.defaultLook.resolved(in: folder).background
+            }
             save(take)
         }
-        let folder = store.folder(for: take.id)
         // Captions from the owner's voice start right away; the editor shows "Transcribing…" until then.
         if take.microphoneOffset != nil, take.captions == nil { studio.transcribe(take, folder: folder) }
         Task {
@@ -247,8 +253,16 @@ final class EditorController: NSObject, NSWindowDelegate {
         saveSettings()
     }
 
+    /// A picture in the look is copied out of this take, so each new take gets its own copy.
     private func useForNewTakes(_ look: Look) {
-        settings.defaultLook = look
+        do {
+            settings.defaultLook = try folder.map { try store.saveDefaultBackdrop(look, from: $0) } ?? look
+        } catch {
+            log.warning("saving the default backdrop failed: \(error.localizedDescription)")
+            var flat = look
+            flat.background = Look.defaultBackground
+            settings.defaultLook = flat
+        }
         saveSettings()
     }
 

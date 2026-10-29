@@ -29,6 +29,11 @@ public struct DollyPaths: Sendable, Hashable {
         takesFolder = exportsFolder.appending(path: "Takes", directoryHint: .isDirectory)
     }
 
+    /// The picture of the "Use for new takes" look, copied out of the take it came from.
+    public func defaultBackdropURL(ext: String) -> URL {
+        supportFolder.appending(path: "default-backdrop.\(ext)", directoryHint: .notDirectory)
+    }
+
     public var settingsURL: URL { supportFolder.appending(path: "settings.json", directoryHint: .notDirectory) }
     public var logURL: URL { supportFolder.appending(path: "dolly.log", directoryHint: .notDirectory) }
 }
