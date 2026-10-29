@@ -66,3 +66,26 @@ public enum CaptionSplitter {
         return out
     }
 }
+
+extension Phrase {
+    /// The same phrase `dt` seconds later, for audio that started `dt` into the take.
+    public func shifted(by dt: Double) -> Phrase {
+        Phrase(text: text, start: start + dt, end: end + dt,
+               words: words.map { Word(text: $0.text, start: $0.start + dt, end: $0.end + dt) })
+    }
+}
+
+extension CaptionTrack {
+    /// A fresh transcription: the phrases split into captions in take time, keeping the old track's
+    /// position, size and .srt switch.
+    public static func transcribed(_ phrases: [Phrase], locale: String, offset: Double, keeping old: CaptionTrack?) -> CaptionTrack {
+        var track = CaptionTrack(source: .voice, locale: locale,
+                                 items: CaptionSplitter.captions(from: phrases.map { $0.shifted(by: offset) }))
+        if let old {
+            track.position = old.position
+            track.size = old.size
+            track.saveSRT = old.saveSRT
+        }
+        return track
+    }
+}

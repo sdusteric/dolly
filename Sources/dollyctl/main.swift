@@ -13,7 +13,8 @@ let usage = """
 usage:
   dollyctl zooms <pointer.csv|pointer.bin> --size WxH --target window|area|display
   dollyctl camera <take-folder> --at <seconds>
-  dollyctl render <take-folder> --frames 0,8.6 --out <dir>
+  dollyctl render <take-folder> --frames 0,8.6 --out <dir> [--shape original|16x9|1x1|4x5|9x16]
+  dollyctl captions <take-folder> --srt
   dollyctl pointer <take-folder>
   dollyctl fixture shelf-demo --out <dir>
 """
@@ -86,20 +87,34 @@ case "render":
     } catch {
         fail("can't create \(out)")
     }
+    let shape: ShapePreset
+    do {
+        shape = try option("--shape", in: rest).map(DollyctlCommands.parseShape) ?? take.currentShape
+    } catch {
+        fail(error.localizedDescription)
+    }
     let pointer = TakeInputs.pointerPath(take: take, folder: folder)
-    let layout = ShapeLayout(shape: .wide16x9, recordingSize: take.size, padding: take.look.padding)
+    let layout = ShapeLayout(shape: shape, recordingSize: take.size, padding: take.look.padding)
     let camera = CameraPath(zooms: take.zooms, layout: layout, pointer: pointer.map { p in { @Sendable t in p.position(at: t) } },
                             duration: take.duration)
     for t in times {
+        var webcam: CGImage?
+        if let track = take.camera { webcam = await frame(of: folder.appending(path: track.file), at: max(t - track.startOffset, 0)) }
         guard let recording = await frame(of: folder.appending(path: TakeStore.movieName), at: t),
-              let image = StillRenderer.render(take: take, recording: recording, camera: camera.camera(at: t),
+              let image = StillRenderer.render(take: take, folder: folder, shape: shape, recording: recording, camera: camera.camera(at: t),
                                                pointer: pointer?.position(at: t).map { ($0, pointer?.shape(at: t) ?? .arrow) },
-                                               ring: pointer?.ring(at: t).map { ($0.center, $0.progress) })
+                                               ring: pointer?.ring(at: t).map { ($0.center, $0.progress) },
+                                               cameraFrame: webcam, at: t, depthProgress: camera.depthProgress(at: t))
         else { fail("can't render \(t) s") }
-        let url = outURL.appending(path: "frame-\(String(format: "%.1f", t)).png")
+        let url = outURL.appending(path: "frame-\(shape.fileSuffix)-\(String(format: "%.1f", t)).png")
         guard writePNG(image, to: url) else { fail("can't write \(url.path(percentEncoded: false))") }
         print("wrote \(url.path(percentEncoded: false)) (\(image.width)x\(image.height))")
     }
+
+case "captions":
+    guard let path = rest.first, rest.contains("--srt") else { fail(usage) }
+    let (take, _) = loadTake(path)
+    print(DollyctlCommands.captionsSRT(take), terminator: "")
 
 case "pointer":
     guard let path = rest.first else { fail(usage) }

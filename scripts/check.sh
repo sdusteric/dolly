@@ -28,7 +28,8 @@ export DOLLY_NO_UPDATES=1
 
 BUNDLE_ID="dev.sdusteric.dolly"
 # Design D79.
-MIC_USAGE="Dolly records your microphone only during a recording you start with the microphone turned on."
+MIC_USAGE="Dolly records your microphone only when the Microphone switch is on."
+CAMERA_USAGE="Dolly records your camera only when the Camera switch is on."
 APP="$ROOT/build/bundle/Dolly.app"
 # app-updates CONTRACT.md
 FEED_URL="https://sdusteric.github.io/app-updates/dolly/appcast.xml"
@@ -101,7 +102,7 @@ codesign_check() {
 }
 
 plist_check() {
-  local plist="$APP/Contents/Info.plist" id ui mic scheme actions
+  local plist="$APP/Contents/Info.plist" id ui mic camera scheme actions
   plutil -lint "$plist" || return 1
   id="$(plutil -extract CFBundleIdentifier raw -o - "$plist")"
   [ "$id" = "$BUNDLE_ID" ] || { echo "bundle id is $id"; return 1; }
@@ -109,11 +110,13 @@ plist_check() {
   [ "$ui" = absent ] || { echo "LSUIElement is $ui; Dolly is a regular Dock app"; return 1; }
   mic="$(plutil -extract NSMicrophoneUsageDescription raw -o - "$plist" 2>/dev/null || true)"
   [ "$mic" = "$MIC_USAGE" ] || { echo "NSMicrophoneUsageDescription is '$mic', expected '$MIC_USAGE'"; return 1; }
+  camera="$(plutil -extract NSCameraUsageDescription raw -o - "$plist" 2>/dev/null || true)"
+  [ "$camera" = "$CAMERA_USAGE" ] || { echo "NSCameraUsageDescription is '$camera', expected '$CAMERA_USAGE'"; return 1; }
   scheme="$(plutil -extract CFBundleURLTypes.0.CFBundleURLSchemes.0 raw -o - "$plist" 2>/dev/null || true)"
   [ "$scheme" = dolly ] || { echo "CFBundleURLTypes scheme is '$scheme', expected dolly"; return 1; }
   actions="$(plutil -extract SDShelfActions json -o - "$plist" 2>/dev/null || true)"
   [ "$actions" = '["record","open-latest","check-for-updates"]' ] || { echo "SDShelfActions is '$actions'"; return 1; }
-  echo "CFBundleIdentifier $id, no LSUIElement, NSMicrophoneUsageDescription matches, URL scheme dolly, SDShelfActions $actions"
+  echo "CFBundleIdentifier $id, no LSUIElement, NSMicrophoneUsageDescription and NSCameraUsageDescription match, URL scheme dolly, SDShelfActions $actions"
 }
 
 sparkle_check() {

@@ -21,6 +21,7 @@ final class EditorController: NSObject, NSWindowDelegate {
     private let log: Log
     private(set) var settings: DollyCore.Settings
     private let preview = PreviewPlayer()
+    private let studio: StudioTasks
     private var window: NSWindow?
     private let session: TakeSession
     private var filmstrip: Image?
@@ -33,8 +34,12 @@ final class EditorController: NSObject, NSWindowDelegate {
         store = TakeStore(paths: paths)
         session = TakeSession(store: store)
         settingsStore = SettingsStore(paths: paths)
+        studio = StudioTasks(store: store, log: log)
         screen = EditorScreenModel(entries: [], totalBytes: 0, editor: nil, recordShortcut: settings.hotkey.displayString)
         super.init()
+        studio.openEditor = { [weak self] id in self?.screen.editor.flatMap { $0.take.id == id ? $0 : nil } }
+        studio.window = { [weak self] in self?.window }
+        studio.backdropChanged = { [weak self] in self?.preview.takeChanged() }
         screen.onRecord = { [weak self] in self?.onRecord() }
         screen.onExport = { [weak self] in self?.showExport() }
         screen.onSelect = { [weak self] entry in self?.open(entry) }
@@ -63,10 +68,17 @@ final class EditorController: NSObject, NSWindowDelegate {
         window.minSize = CGSize(width: 1100, height: 720)
         window.isReleasedWhenClosed = false
         window.delegate = self
-        let preview = preview
+        let preview = preview, studio = studio
         let root = EditorView(model: screen) { [weak self] editor in
-            AnyView(LiveWorkspace(editor: editor, preview: preview, filmstrip: self?.filmstrip,
-                                  useForNewTakes: { look in self?.useForNewTakes(look) }))
+            var actions = StudioActions()
+            actions.useForNewTakes = { look in self?.useForNewTakes(look) }
+            actions.chooseBackdrop = { pick in
+                if let folder = self?.folder { studio.chooseBackdrop(pick, editor: editor, folder: folder) }
+            }
+            actions.transcribe = {
+                if let folder = self?.folder { studio.transcribeAgain(editor, folder: folder) }
+            }
+            return AnyView(LiveWorkspace(editor: editor, preview: preview, studio: studio, filmstrip: self?.filmstrip, actions: actions))
         }
         window.contentView = NSHostingView(rootView: root)
         window.center()
@@ -120,6 +132,8 @@ final class EditorController: NSObject, NSWindowDelegate {
             save(take)
         }
         let folder = store.folder(for: take.id)
+        // Captions from the owner's voice start right away; the editor shows "Transcribing…" until then.
+        if take.microphoneOffset != nil, take.captions == nil { studio.transcribe(take, folder: folder) }
         Task {
             await makePoster(take, folder: folder)
             reloadTakes()
@@ -350,14 +364,9 @@ final class EditorController: NSObject, NSWindowDelegate {
 private struct LiveWorkspace: View {
     let editor: EditorModel
     let preview: PreviewPlayer
+    let studio: StudioTasks
     let filmstrip: Image?
-    let useForNewTakes: (Look) -> Void
-
-    private var actions: StudioActions {
-        var actions = StudioActions()
-        actions.useForNewTakes = useForNewTakes
-        return actions
-    }
+    let actions: StudioActions
 
     var body: some View {
         let clicks = editor.pointer?.clicks ?? []
@@ -365,7 +374,8 @@ private struct LiveWorkspace: View {
             editor: editor,
             stage: AnyView(StageView(editor: editor, image: preview.aimImage, player: preview.player,
                                      isPlaying: preview.isPlaying, clicks: clicks)),
-            inspector: AnyView(StudioInspector(editor: editor, clicks: clicks, actions: actions)),
+            inspector: AnyView(StudioInspector(editor: editor, clicks: clicks, actions: actions,
+                                               transcription: studio.status(editor.take.id))),
             timeline: AnyView(TimelineView(editor: editor, clickTimes: clicks.map(\.t), filmstrip: filmstrip,
                                            playback: preview, isPlaying: preview.isPlaying))
         )

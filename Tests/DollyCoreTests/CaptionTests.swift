@@ -80,4 +80,20 @@ import Testing
         let out = try await FakeTranscriber(phrases: [p]).transcribe(audio: URL(filePath: "/nope.m4a"), locale: Locale(identifier: "en_US"))
         #expect(out == [p])
     }
+
+    @Test func phrasesShiftIntoTheTake() {
+        let p = phrase("Hi there", from: 1).shifted(by: 0.25)
+        #expect(approx(p.start, 1.25) && approx(p.words[0].start, 1.25) && approx(p.words[1].end, 1.85))
+    }
+
+    @Test func transcriptKeepsTheTracksStyle() {
+        var old = CaptionTrack(source: .voice, locale: "en_US", items: [Caption(start: 0, end: 1, text: "old")])
+        old.position = .top
+        old.size = 20
+        old.saveSRT = true
+        old.edited = true
+        let fresh = CaptionTrack.transcribed([phrase("New words here.", from: 2)], locale: "en_US", offset: 0.5, keeping: old)
+        #expect(fresh.source == .voice && fresh.position == .top && fresh.size == 20 && fresh.saveSRT && !fresh.edited)
+        #expect(fresh.items.map(\.text) == ["New words here."] && approx(fresh.items[0].start, 2.5))
+    }
 }

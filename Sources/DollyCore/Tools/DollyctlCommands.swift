@@ -41,5 +41,24 @@ public enum DollyctlCommands {
         return values.compactMap(\.self)
     }
 
+    public struct UsageError: Error, LocalizedError {
+        public let message: String
+        public var errorDescription: String? { message }
+    }
+
+    /// `original`, `16x9`, `1x1`, `4x5` or `9x16`.
+    public static func parseShape(_ text: String) throws -> ShapePreset {
+        guard let shape = ShapePreset.allCases.first(where: { $0.fileSuffix == text.lowercased() }) else {
+            throw UsageError(message: "unknown shape \(text); use " + ShapePreset.allCases.map(\.fileSuffix).joined(separator: ", "))
+        }
+        return shape
+    }
+
+    /// The take's captions as the .srt an export would write, or nothing when it has none.
+    public static func captionsSRT(_ take: Take) -> String {
+        let items = (take.captions?.items ?? []).filter { $0.start < take.trim.upperBound && !$0.text.isEmpty }
+        return items.isEmpty ? "" : SRT.text(items, trimStart: take.trim.lowerBound)
+    }
+
     private static func one(_ v: Double) -> String { String(format: "%.1f", v) }
 }
