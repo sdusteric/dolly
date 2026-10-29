@@ -6,7 +6,8 @@
 <style>
 /* The studio pass on direction A (spike marks). Same window, toolbar, sidebar and timeline as
    a-spike-marks.html; the shape bar gains every shape, the inspector becomes Look, Pointer and
-   Zoom tabs, and Look gets the backdrop library. ?theme=light|dark&view=look|zoom */
+   Zooms, Camera and Captions tabs, and Look gets the backdrop library and the pointer.
+   ?theme=light|dark&view=look|zoom|camera|captions */
 :root {
   --frame: #EFEEEB; --sheet: #FFFFFF; --raised: #F5F4F1; --active: #E4E2DE;
   --border: #E6E4E0; --control: #CFCCC6;
@@ -56,15 +57,15 @@ body { background: var(--frame); color: var(--text); font: 13px/18px var(--font)
 .take span { color: var(--muted); font-size: 12px; }
 .side .foot { position: absolute; left: 18px; right: 18px; bottom: 18px; color: var(--muted); font-size: 12px; line-height: 16px; }
 .sheet { position: absolute; left: 228px; top: 52px; right: 8px; bottom: 8px; background: var(--sheet); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
-.work { position: absolute; left: 16px; top: 16px; right: 320px; height: 548px; }
+.work { position: absolute; left: 16px; top: 16px; right: 320px; height: 508px; }
 .shapes { display: flex; align-items: center; gap: 12px; height: 32px; }
 .seg { display: inline-flex; background: var(--raised); border-radius: 7px; padding: 2px; }
 .seg span { padding: 0 12px; height: 26px; line-height: 26px; border-radius: 5px; color: var(--muted); font-weight: 500; white-space: nowrap; }
 .seg span.on { background: var(--sheet); color: var(--text); box-shadow: 0 0 0 1px var(--border); }
 .shapes .note { color: var(--muted); margin-left: auto; }
 /* The stage area is 868 x 488; the output frame sits centered in it at the chosen shape. */
-.area { position: relative; margin-top: 12px; width: 868px; height: 488px; border-radius: 8px; background: var(--raised); overflow: hidden; }
-.out { position: absolute; top: 0; height: 488px; overflow: hidden; }
+.area { position: relative; margin-top: 12px; width: 868px; height: 448px; border-radius: 8px; background: var(--raised); overflow: hidden; }
+.out { position: absolute; top: 0; height: 448px; overflow: hidden; }
 .rec { position: absolute; background: center/cover no-repeat; }
 .pointer { position: absolute; width: 22px; height: 30px; }
 .scrimbox { position: absolute; box-shadow: 0 0 0 2000px var(--scrim); }
@@ -77,9 +78,9 @@ body { background: var(--frame); color: var(--text); font: 13px/18px var(--font)
 .click { position: absolute; width: 16px; height: 16px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.4); }
 .stage-meta { position: absolute; left: 12px; bottom: 10px; color: #fff; font-size: 12px; background: rgba(0,0,0,.45); padding: 2px 8px; border-radius: 4px; }
 /* inspector */
-.insp { position: absolute; top: 16px; right: 16px; width: 288px; height: 548px; background: var(--raised); border-radius: 12px; padding: 12px 16px 16px; }
+.insp { position: absolute; top: 16px; right: 16px; width: 288px; height: 508px; background: var(--raised); border-radius: 12px; padding: 12px 16px 16px; }
 .tabs { display: flex; background: var(--active); border-radius: 7px; padding: 2px; }
-.tabs span { flex: 1; text-align: center; height: 26px; line-height: 26px; border-radius: 5px; color: var(--muted); font-weight: 500; }
+.tabs span { flex: 1 1 auto; padding: 0 6px; text-align: center; height: 26px; line-height: 26px; border-radius: 5px; color: var(--muted); font-weight: 500; }
 .tabs span.on { background: var(--sheet); color: var(--text); }
 .tabs span em { font-style: normal; color: var(--muted); font-weight: 400; margin-left: 4px; }
 .insp h3 { font: 600 16px/20px var(--display); letter-spacing: -.01em; display: flex; align-items: center; gap: 8px; margin-top: 16px; }
@@ -110,7 +111,7 @@ body { background: var(--frame); color: var(--text); font: 13px/18px var(--font)
 .link { color: var(--muted); text-decoration: underline; text-underline-offset: 2px; }
 .foot-link { position: absolute; left: 16px; right: 16px; bottom: 14px; display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; }
 /* timeline (unchanged from A) */
-.tl { position: absolute; left: 16px; right: 16px; bottom: 16px; height: 248px; }
+.tl { position: absolute; left: 16px; right: 16px; bottom: 16px; height: 288px; }
 .tl-head { display: flex; align-items: center; gap: 12px; height: 32px; }
 .play { width: 28px; height: 28px; border-radius: 6px; background: var(--raised); display: grid; place-items: center; }
 .play::before { content: ""; border-left: 9px solid var(--text); border-top: 6px solid transparent; border-bottom: 6px solid transparent; margin-left: 2px; }
@@ -123,7 +124,7 @@ body { background: var(--frame); color: var(--text); font: 13px/18px var(--font)
 .track { position: relative; }
 .ruler { height: 20px; color: var(--muted); font-size: 11px; }
 .ruler span { position: absolute; top: 0; padding-left: 4px; border-left: 1px solid var(--control); height: 14px; line-height: 12px; }
-.video { height: 56px; border-radius: 6px; background: var(--raised) left center / 56px 56px repeat-x; overflow: hidden; }
+.video { height: 44px; border-radius: 6px; background: var(--raised) left center / 44px 44px repeat-x; overflow: hidden; }
 .trim { position: absolute; top: 0; bottom: 0; width: 10px; background: var(--text); }
 .trim.l { left: 0; border-radius: 6px 0 0 6px; } .trim.r { right: 0; border-radius: 0 6px 6px 0; }
 .zoom { height: 46px; background: var(--raised); border-radius: 6px; }
@@ -134,9 +135,22 @@ body { background: var(--frame); color: var(--text); font: 13px/18px var(--font)
 .mark .ramp.in { left: 0; } .mark .ramp.out { right: 0; }
 .mark span { position: relative; }
 .mark em { position: absolute; left: 0; top: 24px; font: 400 11px/14px var(--font); color: var(--muted); font-style: normal; }
-.clicks { height: 20px; }
+.clicks { height: 18px; }
+.cam { height: 26px; background: var(--raised); border-radius: 6px; }
+.cam b { position: absolute; top: 4px; height: 18px; left: calc(var(--a) / var(--dur) * 100%); width: calc((var(--b) - var(--a)) / var(--dur) * 100%); background: var(--control); color: var(--text); border-radius: 3px; font: 500 11px/18px var(--font); padding: 0 6px; overflow: hidden; white-space: nowrap; }
+.cam b.small { opacity: .55; }
+.cap { height: 30px; background: var(--raised); border-radius: 6px; }
+.cap b { position: absolute; top: 4px; height: 22px; left: calc(var(--a) / var(--dur) * 100%); width: calc((var(--b) - var(--a)) / var(--dur) * 100% - 2px); background: var(--sheet); border: 1px solid var(--control); border-radius: 4px; font: 400 11px/20px var(--font); padding: 0 5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--text); }
+.cap b.on { border: 2px solid var(--text); line-height: 18px; }
+.bubble { position: absolute; background: center 30% / cover no-repeat; border: 3px solid #fff; box-shadow: 0 6px 18px rgba(0,0,0,.35); }
+.caption { position: absolute; left: 50%; transform: translateX(-50%); padding: 6px 14px; border-radius: 8px; background: rgba(12,12,12,.74); color: #fff; font: 600 17px/22px var(--display); white-space: nowrap; }
+.corners { display: grid; grid-template-columns: 22px 22px; gap: 4px; }
+.corners i { width: 22px; height: 16px; border-radius: 3px; border: 1px solid var(--control); background: var(--sheet); }
+.corners i.on { background: var(--text); border-color: var(--text); }
+.field { margin-top: 8px; padding: 6px 8px; min-height: 52px; border-radius: 6px; border: 1px solid var(--control); background: var(--sheet); line-height: 18px; }
+.insp h4 { font: 600 13px/18px var(--font); margin-top: 18px; }
 .clicks i { position: absolute; top: 5px; left: calc(var(--t) / var(--dur) * 100%); width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; background: var(--text); }
-.playhead { position: absolute; top: -150px; bottom: -4px; left: calc(var(--p) / var(--dur) * 100%); width: 2px; margin-left: -1px; background: var(--text); }
+.playhead { position: absolute; top: -214px; bottom: -4px; left: calc(var(--p) / var(--dur) * 100%); width: 2px; margin-left: -1px; background: var(--text); }
 .playhead::before { content: ""; position: absolute; top: -2px; left: -5px; width: 12px; height: 8px; background: var(--text); border-radius: 2px; }
 .hint { margin-top: 10px; color: var(--muted); font-size: 12px; }
 </style>
@@ -180,6 +194,10 @@ body { background: var(--frame); color: var(--text); font: 13px/18px var(--font)
       <div class="track video ft-strip"><i class="trim l"></i><i class="trim r"></i></div>
       <span class="lname">Zoom</span>
       <div class="track zoom" id="marks"></div>
+      <span class="lname">Camera</span>
+      <div class="track cam" id="cam"></div>
+      <span class="lname">Captions</span>
+      <div class="track cap" id="caps"></div>
       <span class="lname">Clicks</span>
       <div class="track clicks">
         <i style="--t:2.4"></i><i style="--t:7.9"></i><i style="--t:15.2"></i><i style="--t:17.0"></i><i style="--t:19.8"></i><i style="--t:27.6"></i><i style="--t:29.9"></i><i style="--t:38.9"></i><i style="--t:41.2"></i>
@@ -193,85 +211,133 @@ body { background: var(--frame); color: var(--text); font: 13px/18px var(--font)
 <script>
 const q = new URLSearchParams(location.search);
 const theme = q.get('theme') || 'light';
-const view = q.get('view') || 'look';
+const view = q.get('view') || 'look';   // look | zoom | camera | captions
 document.documentElement.dataset.theme = theme;
 const FOOT = `../assets/footage-${theme}.png`, FW = 1696, FH = 1716;
+// Stand-in face for the camera: "Portrait of a Smiling Man", Theo van Doesburg, 1905, public domain.
+const FACE = '../assets/portrait-of-a-smiling-man.jpg';
 
-// Look: 4:5 on the Rose backdrop, playing at 0:24.6. Zoom: 16:9 on Harbor, Aim mode on zoom 2.
-const look = view === 'look';
-const shape = look ? '4:5' : '16:9';
-const playhead = look ? 24.6 : 8.6;
-const backdrop = look ? 'rose' : 'harbor';
+const V = {
+  look:     { shape: '4:5',  t: 24.6, bd: 'rose',   tab: 'Look' },
+  zoom:     { shape: '16:9', t: 8.6,  bd: 'harbor', tab: 'Zooms' },
+  camera:   { shape: '16:9', t: 12.4, bd: 'slate',  tab: 'Camera' },
+  captions: { shape: '9:16', t: 12.4, bd: 'moss',   tab: 'Captions' },
+}[view];
+// The camera and captions are on for this take; Aim mode shows the bare recording.
+const showCamera = view !== 'zoom';
+const showCaption = view !== 'zoom';
 const shapes = { 'Original': [848, 858], '16:9': [16, 9], '1:1': [1, 1], '4:5': [4, 5], '9:16': [9, 16] };
 const sizes = { 'Original': '1696 × 1716', '16:9': '1920 × 1080', '1:1': '1080 × 1080', '4:5': '1080 × 1350', '9:16': '1080 × 1920' };
-document.getElementById('shapes').innerHTML = Object.keys(shapes).map(s => `<span class="${s === shape ? 'on' : ''}">${s}</span>`).join('');
-document.getElementById('shape-note').textContent = `Exports ${sizes[shape]} for X and Threads`;
-document.getElementById('time').innerHTML = `${look ? '0:24.6' : '0:08.6'} <span>/ 0:48.2</span>`;
-document.getElementById('playhead').style.setProperty('--p', playhead);
+const fmt = t => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
+document.getElementById('shapes').innerHTML = Object.keys(shapes).map(x => `<span class="${x === V.shape ? 'on' : ''}">${x}</span>`).join('');
+document.getElementById('shape-note').textContent = `Exports ${sizes[V.shape]} for X and Threads`;
+document.getElementById('time').innerHTML = `${fmt(V.t)} <span>/ 0:48.2</span>`;
+document.getElementById('playhead').style.setProperty('--p', V.t);
 document.getElementById('ruler').innerHTML = [0,5,10,15,20,25,30,35,40,45].map(t => `<span style="left:calc(${t}/48.2*100%)">0:${String(t).padStart(2,'0')}</span>`).join('');
 const marks = [[2.1,5.0,'1.6×','Haul tile'],[7.4,10.1,'2.0×','Run check up'],[14.8,21.3,'1.8×, follows pointer','Update and Tidy tile'],[27.0,31.6,'2.2×','Capture area'],[38.2,44.0,'1.5×','New episode']];
-document.getElementById('marks').innerHTML = marks.map((m, i) => `<div class="mark${!look && i === 1 ? ' on' : ''}" style="--a:${m[0]};--b:${m[1]};--r:.6"><i class="ramp in"></i><i class="ramp out"></i><span>${m[2]}</span><em>${m[3]}</em></div>`).join('');
+document.getElementById('marks').innerHTML = marks.map((m, i) => `<div class="mark${view === 'zoom' && i === 1 ? ' on' : ''}" style="--a:${m[0]};--b:${m[1]};--r:.6"><i class="ramp in"></i><i class="ramp out"></i><span>${m[2]}</span><em>${m[3]}</em></div>`).join('');
+// Camera on for the whole take except 33.0 to 36.5, which the owner hid.
+document.getElementById('cam').innerHTML = `<b style="--a:0;--b:33.0">Camera</b><b style="--a:36.5;--b:48.2">Camera</b>`;
+// Illustrative narration for the Shelf demo, as the transcriber would split it.
+const caps = [[0.4,3.8,'This is Shelf, my launcher for every app.'],[4.2,7.2,'Haul shows what is downloading.'],[7.6,11.0,'Run check up tells Tidy to scan again.'],[11.4,14.6,'Each tile has its own quick actions.'],[15.0,20.8,'Updates install right from the board.'],[21.2,26.6,'Reel picks up where I left off.'],[27.0,31.8,'Snap keeps my last three captures.'],[32.2,37.6,'Booth knows which episode is next.'],[38.0,44.2,'Press a number to jump to any app.'],[44.6,47.8,'That is the whole board.']];
+const current = caps.find(c => V.t >= c[0] && V.t <= c[1]);
+document.getElementById('caps').innerHTML = caps.map(c => `<b class="${view === 'captions' && c === current ? 'on' : ''}" style="--a:${c[0]};--b:${c[1]}">${c[2]}</b>`).join('');
 
-// Output frame in the 868 x 488 area.
+// Output frame in the 868 x 448 stage area.
 const area = document.getElementById('area');
-const [sw, sh] = shapes[shape];
-const H = 488, W = Math.round(H * sw / sh);
+const [sw, sh] = shapes[V.shape];
+const H = 448, W = Math.min(868, Math.round(H * sw / sh));
+const ox = (868 - W) / 2;
 const out = document.createElement('div');
 out.className = 'out';
-out.style.cssText = `left:${(868 - W) / 2}px;width:${W}px;background:var(--bd-${backdrop})`;
+out.style.cssText = `left:${ox}px;width:${W}px;background:var(--bd-${V.bd})`;
 area.appendChild(out);
-// Padding 64 pt at 1080 px on the shorter side, corners 12 pt, shadow 60.
-const px = Math.min(W, H) / 1080, pad = 64 * px * 1.6;
-const s = Math.min((W - 2 * pad) / FW, (H - 2 * pad) / FH);
-const rw = FW * s, rh = FH * s, rx = (W - rw) / 2, ry = (H - rh) / 2;
+const short = Math.min(W, H), px = short / 1080, pad = 64 * px * 1.6;
+const sc = Math.min((W - 2 * pad) / FW, (H - 2 * pad) / FH);
+const rw = FW * sc, rh = FH * sc, rx = (W - rw) / 2, ry = (H - rh) / 2;
+const rec = `<div class="rec ft" style="left:${rx}px;top:${ry}px;width:${rw}px;height:${rh}px;border-radius:${12 * px * 1.6}px;box-shadow:0 ${rw*.05}px ${rw*.12}px rgba(0,0,0,.35)"></div>`;
+const pointer = `<svg class="pointer" style="left:${rx + rw * .62}px;top:${ry + rh * .58}px" viewBox="0 0 22 30"><path d="M2 2 L2 24 L8 18.5 L12 27 L16 25.3 L12 17 L20 17 Z" fill="#000" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg>`;
 
-if (look) {
-  // Play mode inside zoom 4 (2.2x on Capture area) would crop; at 0:24.6 the camera is between zooms, at 1x.
-  out.innerHTML = `<div class="rec ft" style="left:${rx}px;top:${ry}px;width:${rw}px;height:${rh}px;border-radius:${12 * px * 1.6}px;box-shadow:0 ${rw*.05}px ${rw*.12}px rgba(40,6,20,.45)"></div>
-    <svg class="pointer" style="left:${rx + rw * .62}px;top:${ry + rh * .58}px" viewBox="0 0 22 30"><path d="M2 2 L2 24 L8 18.5 L12 27 L16 25.3 L12 17 L20 17 Z" fill="#000" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg>`;
-} else {
-  // Aim mode: the whole recording at 1x with the scrim outside zoom 2's view and the spike corners.
+if (view === 'zoom') {
   const tx = .75, ty = .37, z = 2.0, vw = W / z, vh = H / z;
-  // Clamped to the recording, the way the engine clamps: a view wider than it centers on it.
   const clamp = (c, v, lo, len) => v >= len ? lo + len / 2 : Math.min(Math.max(c, lo + v / 2), lo + len - v / 2);
   const cx = clamp(rx + tx * rw, vw, rx, rw), cy = clamp(ry + ty * rh, vh, ry, rh);
-  const L = (868 - W) / 2 + cx - vw / 2, T = cy - vh / 2;
-  out.innerHTML = `<div class="rec ft" style="left:${rx}px;top:${ry}px;width:${rw}px;height:${rh}px;border-radius:${12 * px * 1.6}px;box-shadow:0 ${rw*.04}px ${rw*.1}px rgba(0,0,0,.35)"></div>`;
+  const L = ox + cx - vw / 2, T = cy - vh / 2;
+  out.innerHTML = rec;
   area.insertAdjacentHTML('beforeend', `<div class="scrimbox" style="left:${L}px;top:${T}px;width:${vw}px;height:${vh}px"></div>
     <div class="tape-label" style="left:${L}px;top:${T - 30}px">2.0×  Run check up</div>
     <div class="spike" style="position:absolute;left:${L}px;top:${T}px;width:${vw}px;height:${vh}px"><i></i><i></i><i></i><i></i></div>
-    <div class="click" style="left:${(868 - W) / 2 + rx + tx * rw - 8}px;top:${ry + ty * rh - 8}px"></div>
+    <div class="click" style="left:${ox + rx + tx * rw - 8}px;top:${ry + ty * rh - 8}px"></div>
     <div class="stage-meta num">Drag inside the corners to re-aim. Drag a corner to change depth.</div>`);
+} else {
+  let html = rec + pointer;
+  if (showCamera) {
+    // 22% of the short side, bottom-left, inset by the padding.
+    // 9:16 here keeps the camera top-left, so the caption has the band under the recording.
+    const d = Math.round(short * .22), m = Math.round(pad * .6), top = view === 'captions' ? m : H - d - m;
+    html += `<div class="bubble" style="width:${d}px;height:${d}px;left:${m}px;top:${top}px;border-radius:50%;background-image:url(${FACE})"></div>`;
+  }
+  if (showCaption && current) {
+    // The rule from the spec: a bottom caption moves above a bottom camera.
+    const d = Math.round(short * .22), m = Math.round(pad * .6);
+    const bottom = view === 'captions' ? Math.round((H - ry - rh) / 2 - 30) : m + d + 10;
+    html += `<div class="caption" style="bottom:${bottom}px;font-size:${view === 'captions' ? 15 : 17}px;white-space:${view === 'captions' ? 'normal' : 'nowrap'};width:${view === 'captions' ? Math.round(W * .82) + 'px' : 'auto'};text-align:center">${current[2]}</div>`;
+  }
+  out.innerHTML = html;
 }
 
 const slider = (label, value, frac, ticks) => `<div class="group"><label>${label}<span class="num">${value}</span></label>
   <div class="slider"><b style="width:${frac * 100}%"></b><i style="left:${frac * 100}%"></i></div>${ticks ? `<div class="ticks num">${ticks.map(t => `<span>${t}</span>`).join('')}</div>` : ''}</div>`;
-const tabs = on => `<div class="tabs">${['Look', 'Pointer', 'Zoom'].map(t => `<span class="${t === on ? 'on' : ''}">${t === 'Zoom' ? 'Zooms' : t}</span>`).join('')}</div>`;
+const toggle = (label, on = true) => `<div class="row"><label>${label}</label><span class="toggle${on ? '' : ' off'}"></span></div>`;
+const seg = (items, on) => `<div class="full"><div class="seg">${items.map(i => `<span class="${i === on ? 'on' : ''}">${i}</span>`).join('')}</div></div>`;
+const tabs = on => `<div class="tabs">${['Look', 'Zooms', 'Camera', 'Captions'].map(t => `<span class="${t === on ? 'on' : ''}">${t}</span>`).join('')}</div>`;
 const flats = ['#3E4A4F', '#D9CFC0', '#1F2A44', '#F2F2F2', '#7A3B2E', '#151413'];
 const grads = ['harbor', 'ember', 'slate', 'moss', 'rose', 'sand'];
 const insp = document.getElementById('insp');
-if (look) {
-  insp.innerHTML = `${tabs('Look')}
+const panels = {
+  look: () => `${tabs('Look')}
     <div class="group"><label>Backdrop</label>
       <div class="bd">${flats.map(c => `<i class="${c === '#F2F2F2' ? 'light' : ''}" style="background:${c}"></i>`).join('')}</div>
-      <div class="bd">${grads.map(g => `<i class="${g === backdrop ? 'on' : ''}" style="background:var(--bd-${g})"></i>`).join('')}</div>
+      <div class="bd">${grads.map(g => `<i class="${g === V.bd ? 'on' : ''}" style="background:var(--bd-${g})"></i>`).join('')}</div>
       <div class="pics"><span class="pic"><span class="mini"></span>Desktop</span><span class="pic">Choose…</span></div>
     </div>
     ${slider('Padding', '64 pt', 64 / 160)}
     ${slider('Corners', '12 pt', 12 / 24)}
     ${slider('Shadow', '60%', .6)}
-    <div class="foot-link"><span class="link">Use for new takes</span></div>`;
-} else {
-  insp.innerHTML = `${tabs('Zoom')}
+    <h4>Pointer</h4>
+    ${slider('Size', '1.5×', .25)}
+    ${toggle('Ring on each click')}
+    <div class="foot-link"><span class="link">Use for new takes</span></div>`,
+  zoom: () => `${tabs('Zooms')}
     <h3><span class="swatch-tape"></span>Zoom 2 of 5</h3>
     <p class="sub num">0:07.4 to 0:10.1, 2.7 s. From your click at 0:07.9.</p>
-    <div class="full"><div class="seg"><span class="on">Hold on the click</span><span>Follow pointer</span></div></div>
+    ${seg(['Hold on the click', 'Follow pointer'], 'Hold on the click')}
     ${slider('Depth', '2.0×', .5, ['1×', '2×', '3×'])}
     ${slider('Move in', '0.6 s', (0.6 - .2) / 1.3)}
     ${slider('Move out', '0.5 s', (0.5 - .2) / 1.3)}
     <div class="row" style="margin-top:14px"><span class="link">Remove this zoom</span><span class="kbd">⌫</span></div>
-    <div class="foot-link"><span>Tab selects the next zoom</span></div>`;
-}
+    <div class="foot-link"><span>Tab selects the next zoom</span></div>`,
+  camera: () => `${tabs('Camera')}
+    ${toggle('Show camera')}
+    ${seg(['Circle', 'Rounded'], 'Circle')}
+    ${slider('Size', '22%', (22 - 10) / 30, ['10%', '25%', '40%'])}
+    <div class="row" style="margin-top:12px"><label>Corner</label><div class="corners"><i class="${view === 'captions' ? 'on' : ''}"></i><i></i><i class="${view === 'captions' ? '' : 'on'}"></i><i></i></div></div>
+    ${toggle('Border')}
+    ${toggle('Shrink during zooms')}
+    ${toggle('Mirror')}
+    <div class="foot-link"><span>Drag the camera on the stage to move it</span></div>`,
+  captions: () => `${tabs('Captions')}
+    ${seg(['From your voice', 'Typed'], 'From your voice')}
+    <p class="sub" style="margin-top:6px">English, transcribed on this Mac.</p>
+    <div class="group"><label>Caption 4 of 10<span class="num">0:11.4 to 0:14.6</span></label>
+      <div class="field">Each tile has its own quick actions.</div></div>
+    ${seg(['Bottom', 'Middle', 'Top'], 'Bottom')}
+    ${slider('Size', '15 pt', (15 - 10) / 14)}
+    ${toggle('Save an .srt file with each export', false)}
+    <p class="sub" style="margin-top:10px">Captions move above the camera when both sit at the bottom.</p>
+    <div class="foot-link"><span class="link">Transcribe again</span><span>Return splits a caption</span></div>`,
+};
+insp.innerHTML = panels[view]();
 document.querySelectorAll('.ft').forEach(e => e.style.backgroundImage = `url(${FOOT})`);
 document.querySelectorAll('.ft-strip').forEach(e => e.style.backgroundImage = `url(${FOOT})`);
 </script>
