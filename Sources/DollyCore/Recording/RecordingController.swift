@@ -16,6 +16,10 @@ public final class RecordingController {
     public static let stopFailedMessage = "Stopped: the recording failed"
     /// Kept on a take whose pointer log could not be closed; the movie is fine.
     public static let pointerLogNote = "Some pointer moves were not saved"
+    public static let cameraFile = "camera.mov"
+
+    /// The camera and the microphone, which record beside the screen and never stop it.
+    nonisolated enum Side: String, Sendable { case camera, microphone }
 
     public private(set) var state: State = .idle
     public private(set) var countdownSeen: [Int] = []
@@ -32,9 +36,15 @@ public final class RecordingController {
     @ObservationIgnored private var takeID: UUID?
     @ObservationIgnored private var startHost: Double?
     @ObservationIgnored private var cancelled = false
+    @ObservationIgnored private let sides: [Side: any SideSource]
+    /// Host time of each running side's first sample.
+    @ObservationIgnored private var sideStarts: [Side: Double] = [:]
+    @ObservationIgnored private var sideFailures: [Side: Double] = [:]
+    @ObservationIgnored private var sideNotes: [String] = []
 
     public init(store: TakeStore, source: any RecordingSource, pointer: any PointerSampling, clock: any DollyClock,
-                disk: any DiskSpaceProbing, rules: ZoomRules, namer: any ZoomNaming = FallbackZoomNamer()) {
+                disk: any DiskSpaceProbing, rules: ZoomRules, namer: any ZoomNaming = FallbackZoomNamer(),
+                camera: (any SideSource)? = nil, microphone: (any SideSource)? = nil) {
         self.store = store
         self.source = source
         self.pointer = pointer
@@ -42,6 +52,10 @@ public final class RecordingController {
         self.disk = disk
         self.rules = rules
         self.namer = namer
+        var sides: [Side: any SideSource] = [:]
+        sides[.camera] = camera
+        sides[.microphone] = microphone
+        self.sides = sides
     }
 
     public func start(plan: RecordingPlan) async {
@@ -64,6 +78,9 @@ public final class RecordingController {
         }
         let id = UUID()
         let folder = store.folder(for: id)
+        sideStarts = [:]
+        sideFailures = [:]
+        sideNotes = []
         do {
             _ = try store.createFolder(for: id)
             try pointer.start(pointerURL: folder.appending(path: TakeStore.pointerName),
@@ -83,6 +100,19 @@ public final class RecordingController {
             try? FileManager.default.removeItem(at: folder)
             state = .failed(Self.couldNotStartMessage)
             return
+        }
+        // The screen runs first; a camera or microphone that cannot start is noted and left out.
+        for (side, deviceID) in [(Side.camera, plan.cameraID), (.microphone, plan.microphoneID)] {
+            guard let deviceID, let device = sides[side] else { continue }
+            let url = folder.appending(path: side == .camera ? Self.cameraFile : TakeStore.audioName)
+            do {
+                sideStarts[side] = try await device.start(deviceID: deviceID, url: url) { [weak self] failure in
+                    Task { @MainActor in self?.sideFailures[side] = self?.sideFailures[side] ?? failure.hostTime }
+                }
+            } catch {
+                sideNotes.append("The \(side.rawValue) did not start")
+                try? FileManager.default.removeItem(at: url)
+            }
         }
         self.plan = plan
         takeID = id
@@ -126,6 +156,7 @@ public final class RecordingController {
         } catch {
             // take.mov keeps every fragment written so far; the folder lists as broken with Show in Finder.
             try? pointer.stop()
+            for side in [Side.camera, .microphone] where sideStarts[side] != nil { try? await sides[side]?.stop() }
             state = .failed(Self.stopFailedMessage)
             return nil
         }
@@ -133,6 +164,17 @@ public final class RecordingController {
             try pointer.stop()
         } catch {
             notes.append(Self.pointerLogNote)
+        }
+        for side in [Side.camera, .microphone] where sideStarts[side] != nil {
+            // The side file keeps what it wrote; a failing stop only loses its last moments.
+            try? await sides[side]?.stop()
+        }
+        await Task.yield()
+        notes += sideNotes
+        for side in [Side.camera, .microphone] {
+            if let failed = sideFailures[side] {
+                notes.append("The \(side.rawValue) stopped at \(TimeText.clock(failed - result.startHost))")
+            }
         }
         do {
             let samples = (try? PointerLog.read(folder.appending(path: TakeStore.pointerName))) ?? []
@@ -143,6 +185,12 @@ public final class RecordingController {
                             pixelScale: plan.scale, fps: plan.fps, duration: result.duration,
                             recordingStartHost: result.startHost, notes: notes)
             take.recordingRect = plan.globalRect
+            if let first = sideStarts[.camera], FileManager.default.fileExists(atPath: folder.appending(path: Self.cameraFile).path(percentEncoded: false)) {
+                take.camera = CameraTrack(startOffset: first - result.startHost)
+            }
+            if let first = sideStarts[.microphone], FileManager.default.fileExists(atPath: folder.appending(path: TakeStore.audioName).path(percentEncoded: false)) {
+                take.microphoneOffset = first - result.startHost
+            }
             take.zooms = rules.zooms(for: clicks, size: plan.size, target: plan.target, trim: take.trim)
             let movie = folder.appending(path: TakeStore.movieName)
             for (i, zoom) in take.zooms.enumerated() {

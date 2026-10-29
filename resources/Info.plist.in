@@ -19,7 +19,8 @@
   <key>NSSupportsAutomaticTermination</key><false/>
   <key>NSSupportsSuddenTermination</key><false/>
   <!-- Asked only when the user turns the microphone on for a recording (spec 4.1). -->
-  <key>NSMicrophoneUsageDescription</key><string>Dolly records your microphone only during a recording you start with the microphone turned on.</string>
+  <key>NSCameraUsageDescription</key><string>Dolly records your camera only when the Camera switch is on.</string>
+  <key>NSMicrophoneUsageDescription</key><string>Dolly records your microphone only when the Microphone switch is on.</string>
 
   <!-- Shelf quick actions (spec section 3): dolly://<action>, allowlisted in DollyURL. -->
   <key>CFBundleURLTypes</key>

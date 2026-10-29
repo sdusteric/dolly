@@ -51,9 +51,18 @@ custom_rules:
   screen_capture_only_in_system:
     name: "Screen capture only in DollySystem"
     included: 'Sources/(DollyCore|DollyRender|DollyUI|Dolly|dollyctl)/.*\.swift$'
-    regex: '\bScreenCaptureKit\b|\bSCShareableContent\b|\bSCScreenshotManager\b|\bCGRequestScreenCaptureAccess\b|\bSCStream\b|\bSCRecordingOutput\b|\bSCStreamConfiguration\b|\bSCContentFilter\b|\bAVCaptureDevice\b'
+    regex: '\bScreenCaptureKit\b|\bSCShareableContent\b|\bSCScreenshotManager\b|\bCGRequestScreenCaptureAccess\b|\bSCStream\b|\bSCRecordingOutput\b|\bSCStreamConfiguration\b|\bSCContentFilter\b|\bAVCaptureDevice\b|\bAVCaptureSession\b'
     excluded_match_kinds: [comment, comment.mark, comment.url, doccomment, doccomment.field]
-    message: "ScreenCaptureKit, CGRequestScreenCaptureAccess and AVCaptureDevice belong in Sources/DollySystem only (spec section 9)."
+    message: "ScreenCaptureKit, CGRequestScreenCaptureAccess, AVCaptureDevice and AVCaptureSession belong in Sources/DollySystem only (spec section 9)."
+    severity: error
+
+  speech_only_in_transcriber:
+    name: "Speech only in the transcriber"
+    included: 'Sources/.*\.swift$'
+    excluded: 'Sources/DollyRender/Transcriber\.swift$'
+    regex: '\bimport\s+Speech\b'
+    excluded_match_kinds: [comment, comment.mark, comment.url, doccomment, doccomment.field, string]
+    message: "import Speech lives only in Sources/DollyRender/Transcriber.swift (studio plan)."
     severity: error
 
   no_accessibility_apis:

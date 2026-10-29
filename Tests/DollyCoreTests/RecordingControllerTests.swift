@@ -135,6 +135,68 @@ final class FakePointerSampler: PointerSampling, @unchecked Sendable {
             #expect(try #require(await c.requestStop(hostTime: 1.0)).name == expected)
         }
     }
+
+    func sideController(camera: FakeSideSource?, microphone: FakeSideSource? = nil) -> RecordingController {
+        RecordingController(store: store, source: FakeRecordingSource(options: .init(seconds: 1, startHost: 100)),
+                            pointer: FakePointerSampler(), clock: FakeClock(), disk: FakeDiskSpace(bytes: 50_000_000_000),
+                            rules: ZoomRules(), camera: camera, microphone: microphone)
+    }
+
+    var sidePlan: RecordingPlan {
+        var p = plan
+        p.cameraID = "cam-1"
+        p.microphoneID = "mic-1"
+        return p
+    }
+
+    @Test func cameraOffsetComesFromFirstSample() async throws {
+        defer { try? FileManager.default.removeItem(at: home) }
+        let camera = FakeSideSource(firstHost: 100.25), microphone = FakeSideSource(firstHost: 99.9)
+        let c = sideController(camera: camera, microphone: microphone)
+        await c.start(plan: sidePlan)
+        let take = try #require(await c.requestStop(hostTime: 101))
+        #expect(approx(try #require(take.camera).startOffset, 0.25))
+        #expect(approx(try #require(take.microphoneOffset), -0.1))
+        #expect(camera.deviceID == "cam-1" && microphone.deviceID == "mic-1")
+        #expect(camera.stopped && microphone.stopped)
+        let folder = store.folder(for: take.id)
+        #expect(FileManager.default.fileExists(atPath: folder.appending(path: "camera.mov").path))
+        #expect(FileManager.default.fileExists(atPath: folder.appending(path: TakeStore.audioName).path))
+        #expect(take.notes.isEmpty)
+    }
+
+    @Test func noSwitchesNoSideFiles() async throws {
+        defer { try? FileManager.default.removeItem(at: home) }
+        let camera = FakeSideSource(firstHost: 100)
+        let c = sideController(camera: camera, microphone: FakeSideSource(firstHost: 100))
+        await c.start(plan: plan)
+        let take = try #require(await c.requestStop(hostTime: 101))
+        #expect(take.camera == nil && take.microphoneOffset == nil)
+        #expect(!camera.started)
+        let names = try FileManager.default.contentsOfDirectory(atPath: store.folder(for: take.id).path)
+        #expect(!names.contains("camera.mov") && !names.contains(TakeStore.audioName))
+    }
+
+    @Test func sideSourceFailureKeepsScreenTake() async throws {
+        defer { try? FileManager.default.removeItem(at: home) }
+        let camera = FakeSideSource(firstHost: 100.1, failsAtHost: 121.4)
+        let c = sideController(camera: camera)
+        await c.start(plan: sidePlan)
+        await Task.yield()
+        let take = try #require(await c.requestStop(hostTime: 125))
+        #expect(take.notes.contains("The camera stopped at 0:21.4"))
+        #expect(take.camera != nil)
+    }
+
+    @Test func sideSourceThatCannotStartIsDropped() async throws {
+        defer { try? FileManager.default.removeItem(at: home) }
+        let c = sideController(camera: FakeSideSource(firstHost: 100, failsToStart: true), microphone: FakeSideSource(firstHost: 100))
+        await c.start(plan: sidePlan)
+        guard case .recording = c.state else { Issue.record("not recording: \(c.state)"); return }
+        let take = try #require(await c.requestStop(hostTime: 101))
+        #expect(take.notes == ["The camera did not start"])
+        #expect(take.camera == nil && take.microphoneOffset != nil)
+    }
 }
 
 /// Cancels the countdown from inside the first sleep, the way the hotkey would.

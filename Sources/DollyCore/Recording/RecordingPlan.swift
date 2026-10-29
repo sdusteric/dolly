@@ -23,6 +23,9 @@ public struct RecordingPlan: Sendable, Hashable {
     /// Dolly draws its own pointer (spec 4.7).
     public var showsCursor = false
     public var excludedWindowIDs: [UInt32] = []
+    /// The camera and microphone to record beside the screen; nil when the switch is off.
+    public var cameraID: String?
+    public var microphoneID: String?
 
     public var size: CGSize { globalRect.size }
 
