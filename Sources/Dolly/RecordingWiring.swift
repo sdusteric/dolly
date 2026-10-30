@@ -13,6 +13,9 @@ final class RecordingWiring {
     var onTake: (Take) -> Void = { _ in }
     /// The Camera and Microphone switches changed; the app remembers them in the settings.
     var onDevices: (RecordBarModel) -> Void = { _ in }
+    /// The bar opened, and later closed with a recording started (true) or not (false).
+    var onChoosing: () -> Void = {}
+    var onChoiceEnded: (Bool) -> Void = { _ in }
 
     private let paths: DollyPaths
     private var settings: DollyCore.Settings
@@ -111,6 +114,7 @@ final class RecordingWiring {
 
     private func openBar() {
         guard PermissionProbe.preflight() else { return showPermission(denied: false) }
+        onChoosing()
         // Read before the bar shows; the bar never activates Dolly, but the editor might be in front.
         let frontmost = NSWorkspace.shared.frontmostApplication?.processIdentifier
         Task {
@@ -141,7 +145,7 @@ final class RecordingWiring {
         devices.toggleCamera = { [weak self] in self?.toggle(camera: true) }
         devices.toggleMicrophone = { [weak self] in self?.toggle(camera: false) }
         let view = RecordBar(model: binding, windows: windows, shortcut: shortcut, devices: devices,
-                             record: { [weak self] in self?.record() }, cancel: { [weak self] in self?.closeBar() })
+                             record: { [weak self] in self?.record() }, cancel: { [weak self] in self?.cancelBar() })
         let host = NSHostingView(rootView: view)
         let size = host.fittingSize
         let screen = NSScreen.main?.visibleFrame ?? .zero
@@ -225,20 +229,26 @@ final class RecordingWiring {
         barPanel = nil
     }
 
+    private func cancelBar() {
+        closeBar()
+        onChoiceEnded(false)
+    }
+
     private func record() {
         closeBar()
         switch bar.target {
         case .display:
             let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main
-            guard let screen else { return }
+            guard let screen else { return onChoiceEnded(false) }
             begin(target: .display, displayID: screen.displayID, windowID: nil, rect: screen.frame, scale: screen.backingScaleFactor)
         case .window:
-            guard let window = windows.first(where: { $0.id == bar.windowID }) else { return }
+            guard let window = windows.first(where: { $0.id == bar.windowID }) else { return onChoiceEnded(false) }
             let scale = NSScreen.screens.first { $0.displayID == window.displayID }?.backingScaleFactor ?? 2
             begin(target: .window, displayID: window.displayID, windowID: window.id, rect: window.frame, scale: scale)
         case .area:
             areaPicker.pick { [weak self] rect, screen in
-                guard let self, let rect, let screen else { return }
+                guard let self else { return }
+                guard let rect, let screen else { return onChoiceEnded(false) }
                 begin(target: .area, displayID: screen.displayID, windowID: nil, rect: rect, scale: screen.backingScaleFactor)
             }
         }
@@ -252,7 +262,7 @@ final class RecordingWiring {
         }
         guard var plan = try? RecordingPlan.make(target: target, displayID: displayID, windowID: windowID, globalRect: rect, scale: scale) else {
             NSSound.beep()
-            return
+            return onChoiceEnded(false)
         }
         bar.apply(to: &plan)
         showCountdown(over: rect)
@@ -260,7 +270,12 @@ final class RecordingWiring {
             await controller.start(plan: plan)
             countdownPanel?.orderOut(nil)
             countdownPanel = nil
-            if case .recording = controller.state { showStatusTimer() }
+            if case .recording = controller.state {
+                onChoiceEnded(true)
+                showStatusTimer()
+            } else {
+                onChoiceEnded(false)
+            }
             if case .failed(let message) = controller.state {
                 if message == RecordingController.couldNotStartMessage, !PermissionProbe.preflight() {
                     showPermission(denied: true)

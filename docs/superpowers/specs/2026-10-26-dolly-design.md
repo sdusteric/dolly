@@ -60,6 +60,8 @@ Window (default), Area, Display. Window uses `SCContentFilter(desktopIndependent
 
 The Record bar is a small floating panel (not a window in the Dock's sense) near the top of the screen: target buttons, "System audio" and "Microphone" toggles (both off by default), Record. Snap's HUD is the reference.
 
+While the bar is open the editor window leaves the screen, so the owner can see and pick what is behind it. If they cancel, it comes back where it was; once a recording starts, it stays away and the take card brings it back.
+
 ### 4.2 Capture
 
 - `SCStreamConfiguration`: `showsCursor = false` (Dolly draws its own pointer, 4.7), 60 fps (`minimumFrameInterval` 1/60) **(my call: demos have fast pointer moves; 30 fps judders when zoomed)**, native pixel size (Retina 2x), `queueDepth` 6, sRGB, BT.709 tagging on the file.

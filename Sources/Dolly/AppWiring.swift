@@ -23,6 +23,7 @@ final class EditorController: NSObject, NSWindowDelegate {
     private let preview = PreviewPlayer()
     private let studio: StudioTasks
     private var window: NSWindow?
+    private var aside = EditorStepAside()
     private let session: TakeSession
     private var filmstrip: Image?
     private var saveTask: Task<Void, Never>?
@@ -84,6 +85,25 @@ final class EditorController: NSObject, NSWindowDelegate {
         window.center()
         window.setFrameAutosaveName("DollyEditor")
         return window
+    }
+
+    /// The Record bar opened: the editor leaves the screen so the owner can see what to record.
+    func stepAside() {
+        guard let window, aside.hide(visible: window.isVisible, active: NSApp.isActive) else { return }
+        preview.pause()
+        window.orderOut(nil)
+    }
+
+    /// A recording started; the take card brings the editor back when it ends.
+    func recordingStarted() { aside.started() }
+
+    /// The bar closed with nothing recorded: the editor returns where it was.
+    func recordingCancelled() {
+        guard let window, let restore = aside.cancelled() else { return }
+        switch restore {
+        case .front: window.makeKeyAndOrderFront(nil)
+        case .behind: window.orderBack(nil)
+        }
     }
 
     func windowWillClose(_ notification: Notification) {

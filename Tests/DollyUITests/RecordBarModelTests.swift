@@ -140,3 +140,48 @@ import Testing
         #expect(origin == CGPoint(x: 1440 - 16 - 260, y: 56))
     }
 }
+
+@Suite struct EditorStepAsideTests {
+    @Test func visibleEditorHidesAndComesBackOnCancel() {
+        var aside = EditorStepAside()
+        let hid = aside.hide(visible: true, active: true)
+        let first = aside.cancelled()
+        let second = aside.cancelled()
+        #expect(hid)
+        #expect(first == .front)
+        #expect(second == nil)
+    }
+
+    @Test func editorBehindAnotherAppComesBackBehind() {
+        var aside = EditorStepAside()
+        let hid = aside.hide(visible: true, active: false)
+        let restore = aside.cancelled()
+        #expect(hid)
+        #expect(restore == .behind)
+    }
+
+    @Test func hiddenOrClosedEditorStaysAway() {
+        var aside = EditorStepAside()
+        let hid = aside.hide(visible: false, active: true)
+        let restore = aside.cancelled()
+        #expect(!hid)
+        #expect(restore == nil)
+    }
+
+    @Test func reopeningTheBarKeepsTheFirstState() {
+        var aside = EditorStepAside()
+        _ = aside.hide(visible: true, active: true)
+        let again = aside.hide(visible: false, active: true)
+        let restore = aside.cancelled()
+        #expect(!again)
+        #expect(restore == .front)
+    }
+
+    @Test func startedRecordingLeavesTheEditorToTheTakeCard() {
+        var aside = EditorStepAside()
+        _ = aside.hide(visible: true, active: true)
+        aside.started()
+        let restore = aside.cancelled()
+        #expect(restore == nil)
+    }
+}

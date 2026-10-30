@@ -32,6 +32,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         let recording = RecordingWiring(paths: paths, settings: settings)
         editor.onRecord = { [weak recording] in recording?.hotkeyPressed() }
         recording.onTake = { [weak editor] take in editor?.received(take) }
+        recording.onChoosing = { [weak editor] in editor?.stepAside() }
+        recording.onChoiceEnded = { [weak editor] started in
+            if started { editor?.recordingStarted() } else { editor?.recordingCancelled() }
+        }
         recording.onDevices = { [weak editor, weak recording] bar in
             guard let editor else { return }
             editor.setRecordDevices(bar)
