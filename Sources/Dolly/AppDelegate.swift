@@ -61,7 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
 
         NSApp.mainMenu = makeMainMenu(shortcut: settings.hotkey)
         editor.writeShelfStatus()
-        editor.openLatest()
+        openDolly()
         let urls = pendingURLs
         pendingURLs = []
         urls.forEach(handle)
@@ -73,8 +73,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        editor?.showWindow()
+        openDolly()
         return true
+    }
+
+    /// Launch, the Dock and Shelf: the latest take in the editor, or the Record bar when there is none.
+    private func openDolly() {
+        guard let editor else { return }
+        editor.reloadTakes()
+        if editor.screen.opensToRecord {
+            recording?.openBarIfIdle()
+        } else if editor.editor == nil {
+            editor.openLatest()
+        } else {
+            editor.showWindow()
+        }
     }
 
     /// Closing the editor keeps Dolly running so the record shortcut still works.

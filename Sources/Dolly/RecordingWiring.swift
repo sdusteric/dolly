@@ -112,6 +112,11 @@ final class RecordingWiring {
         }
     }
 
+    /// Opening Dolly with nothing to edit; never stops or cancels a recording that is under way.
+    func openBarIfIdle() {
+        if RecordBarModel.hotkey(in: controller.state) == .openBar { openBar() }
+    }
+
     private func openBar() {
         guard PermissionProbe.preflight() else { return showPermission(denied: false) }
         onChoosing()

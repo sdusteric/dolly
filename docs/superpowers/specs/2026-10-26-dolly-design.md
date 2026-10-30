@@ -170,7 +170,7 @@ Always below: **Look**: Background (five flat colors plus a picture of the owner
 
 ### 6.5 Empty, first-run and error states
 
-- No takes yet: the sheet shows one sentence and the Record button with its shortcut: "Record a window, an area or the whole screen. Dolly zooms in where you click."
+- No takes yet: opening Dolly (launch, the Dock, Shelf) goes straight to the Record bar, since the editor has nothing to show. Opened from Window > Editor, the sheet shows one sentence and the Record button with its shortcut: "Record a window, an area or the whole screen. Dolly zooms in where you click."
 - First Record without Screen Recording permission: Snap's first-run pattern (a window that says why, one button that asks macOS, then a hint if it stays denied).
 - Take with no clicks: the Zoom lane shows "No clicks in this take. Press Z to add a zoom at the playhead."
 - A take whose files are missing or unreadable: the sidebar row says "Can't open this take" with Show in Finder.

@@ -42,6 +42,16 @@ import Testing
         #expect(TakesSidebarModel.footer(count: 0, bytes: 0) == "Takes will live in ~/Movies/Dolly.")
     }
 
+    @Test @MainActor func openingWithNoTakesGoesToRecord() {
+        let screen = EditorScreenModel(entries: [], totalBytes: 0, editor: nil, recordShortcut: "⌃⌥⌘R")
+        #expect(screen.opensToRecord)
+        screen.entries = entries()
+        #expect(!screen.opensToRecord)
+        // A broken take still needs the editor, to show Show in Finder.
+        screen.entries = [.broken(folder: URL(filePath: "/tmp/takes/y", directoryHint: .isDirectory), reason: "Can't open this take")]
+        #expect(!screen.opensToRecord)
+    }
+
     @Test func emptyStateCopy() {
         #expect(EmptyStateView.message == "Record a window, an area or the whole screen. Dolly zooms in where you click.")
     }
