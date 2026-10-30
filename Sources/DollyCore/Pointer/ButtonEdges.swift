@@ -13,3 +13,25 @@ public enum ButtonEdges {
         return out
     }
 }
+
+/// The event monitor's buttons between two pointer samples. A press that lets go before the next
+/// sample still reads as down in that one sample, so a quick trackpad tap is never lost.
+public struct ButtonLatch: Sendable, Hashable {
+    private var held: UInt8 = 0
+    private var pressed: UInt8 = 0
+
+    public init() {}
+
+    public mutating func down(_ mask: UInt8) {
+        held |= mask
+        pressed |= mask
+    }
+
+    public mutating func up(_ mask: UInt8) { held &= ~mask }
+
+    /// The buttons for this sample: those held now and those pressed since the last sample.
+    public mutating func sample() -> UInt8 {
+        defer { pressed = 0 }
+        return held | pressed
+    }
+}

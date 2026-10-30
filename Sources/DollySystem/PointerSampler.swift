@@ -5,7 +5,8 @@ import Foundation
 
 /// Samples the pointer at 120 Hz on its own timer (spec 4.3 and 4.4), in global points on the host
 /// clock ScreenCaptureKit stamps frames with. Clicks come from polling `pressedMouseButtons` unless
-/// the owner switched to the event monitor (spike S1). Needs no permission either way.
+/// the owner switched to the event monitor (spike S1), which also catches taps shorter than one
+/// sample. Needs no permission either way.
 /// `@unchecked Sendable`: every field is behind `lock`; the timer, the monitor and stop meet there.
 public final class PointerSampler: PointerSampling, @unchecked Sendable {
     public static let rate = 120.0
@@ -17,7 +18,7 @@ public final class PointerSampler: PointerSampling, @unchecked Sendable {
         var windowID: UInt32?
         var lastFrame: CGRect?
         var lastFlush = 0.0
-        var monitorButtons: UInt8 = 0
+        var monitorButtons = ButtonLatch()
         var monitor: Any?
     }
 
@@ -73,8 +74,8 @@ public final class PointerSampler: PointerSampling, @unchecked Sendable {
         let location = NSEvent.mouseLocation
         let shape = shapes?.current ?? .arrow
         lock.withLock {
+            let buttons = clickSource == .monitor ? self.state.monitorButtons.sample() : UInt8(truncatingIfNeeded: NSEvent.pressedMouseButtons & 3)
             let state = self.state
-            let buttons = clickSource == .monitor ? state.monitorButtons : UInt8(truncatingIfNeeded: NSEvent.pressedMouseButtons & 3)
             state.pointer?.append(PointerSample(t: t, x: Float(location.x), y: Float(location.y), buttons: buttons, shape: shape))
             if let id = state.windowID, let frame = Self.windowFrame(id), frame != state.lastFrame {
                 state.windows?.append(WindowFrameSample(t: t, frame: frame))
@@ -103,10 +104,10 @@ public final class PointerSampler: PointerSampling, @unchecked Sendable {
                 guard let self else { return }
                 self.lock.withLock {
                     switch event.type {
-                    case .leftMouseDown: self.state.monitorButtons |= 1
-                    case .leftMouseUp: self.state.monitorButtons &= ~1
-                    case .rightMouseDown: self.state.monitorButtons |= 2
-                    case .rightMouseUp: self.state.monitorButtons &= ~2
+                    case .leftMouseDown: self.state.monitorButtons.down(1)
+                    case .leftMouseUp: self.state.monitorButtons.up(1)
+                    case .rightMouseDown: self.state.monitorButtons.down(2)
+                    case .rightMouseUp: self.state.monitorButtons.up(2)
                     default: break
                     }
                 }
