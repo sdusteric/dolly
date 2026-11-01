@@ -152,12 +152,12 @@ Direction A, Spike marks (section 10), is the target: `docs/mockup/directions/a-
 Shows the clip in the chosen shape. Two modes:
 
 - **Play mode** (no zoom selected, or playing): the output as it will export, camera and pointer included.
-- **Aim mode** (a zoom is selected and the player is paused): the whole recording at 1x with a scrim outside the zoom's view and four pink spike corners around it, plus its tape label ("2.0×  Run check up") above the top-left corner and a ring at the click that made it. Drag inside the corners to re-aim; drag a corner to change depth (the opposite corner stays put, aspect locked); hold Shift to drag without snapping to the click point. Arrow keys nudge the aim 1 pt (Shift 10 pt); `-` and `=` change depth by 0.1x.
+- **Aim mode** (a zoom is selected and the player is paused): the whole recording at 1x with a scrim outside the zoom's view and four pink spike corners around it, plus its tape label ("2.0×  Run check up") above the top-left corner and a ring at the click that made it. Drag inside the corners to re-aim; drag a corner to change depth (the opposite corner stays put, aspect locked); hold Shift to drag without snapping to the click point. A one-line hint names the two drags until the owner first re-aims a zoom, then never again. Arrow keys nudge the aim 1 pt (Shift 10 pt); `-` and `=` change depth by 0.1x.
 
 ### 6.3 The timeline
 
 - Header: play button, time "0:08.6 / 0:48.2", and the length check: "Fits X (2:20 max) and Threads (5:00 max)". Over a limit it says which one in words ("Too long for X by 0:12"); the limits live in one table in DollyCore and are checked against the platforms' current published limits when building (they change).
-- Ruler, then three lanes: **Video** (poster strip with trim handles at both ends), **Zoom** (each zoom a pink tape strip spanning its time, depth inside, target name under it; the move-in and move-out show as a darker band at each end), **Clicks** (one dot per click).
+- Ruler, then three lanes: **Video** (stills from even slices of the take, decoded after it opens with the poster standing in, and trim handles at both ends), **Zoom** (each zoom a pink tape strip spanning its time, depth inside, target name under it; the move-in and move-out show as a darker band at each end), **Clicks** (one dot per click).
 - Click a strip to select it; drag its middle to move it in time, its ends to change when it starts or stops. Drag on empty Zoom lane to draw a new zoom (aimed at the pointer position at that time). `Z` adds a zoom at the playhead. Delete removes the selected zoom (undoable). Selecting a strip selects the same zoom on the stage and in the inspector: the strip and the corners are one object.
 - Space plays and pauses. J, K, L shuttle. Left and right move the playhead one frame (Shift one second). Tab moves selection to the next zoom.
 - Undo and redo cover every edit (`⌘Z`, `⇧⌘Z`).
@@ -177,7 +177,7 @@ Always below: **Look**: Background (five flat colors plus a picture of the owner
 
 ## 7. Export
 
-- Export opens a sheet attached to the window: the four shapes as **plates** side by side on one baseline (direction B's discipline, kept here), each showing the frame at the playhead in that shape, with a checkbox. The current shape is checked. Below: quality (60 fps or 30 fps; H.264), the folder (default `~/Movies/Dolly`), Export.
+- Export opens a sheet attached to the window: the four shapes as **plates** side by side on one baseline (direction B's discipline, kept here), each showing the frame at the playhead in that shape, with a checkbox. The current shape is checked. Below: frame rate (60 fps or 30 fps; H.264), the folder (default `~/Movies/Dolly`), Export.
 - Sizes: 16:9 1920 × 1080, 1:1 1080 × 1080, 4:5 1080 × 1350, 9:16 1080 × 1920. H.264 High profile, AAC 48 kHz when there is audio, `+faststart` (moov atom first) so uploads start fast. Bit rate about 12 Mbit/s at 1080p60 **(my call)**; a 48 s clip is about 70 MB.
 - Rendering: an `AVVideoCompositing` compositor (Core Image on Metal) that draws background, rounded recording with shadow, the camera transform and the pointer, used by both the preview player and `AVAssetWriter` export. Export runs in the background with a progress bar per shape in the sheet and in the toolbar; the editor stays usable.
 - Done: "Saved 2 files" with Copy (puts the file URLs on the pasteboard so a browser upload field accepts a paste) and Show in Finder. File names: `<take name> 16x9.mp4`.
@@ -287,7 +287,8 @@ Editor UI motion only; the clip's camera and pointer motion are content (section
 | Selecting a zoom, switching Play and Aim mode on the stage | Tens per session | none | Rejected. Instant. |
 | Dragging corners or strips | Tens per session | Direct manipulation | Follows the pointer 1:1, no easing, no spring. |
 | Button press feedback | Tens a day | Feedback | Allowed: 120 ms background change, the family token. |
-| Zoom strip added or removed (Z, Delete, undo) | Occasional | Preventing a jarring change | Allowed: 160 ms opacity, from 0.97 scale. Reduce Motion: opacity only. |
+| Zoom strip or caption chip added or removed (Z, C, Delete, undo) | Occasional | Preventing a jarring change | Allowed: 160 ms opacity, from 0.97 scale. Reduce Motion: opacity only. |
+| Aim hint leaving after the first re-aim | Once | Preventing a jarring change | Allowed: 160 ms opacity. |
 | Record countdown 3, 2, 1 | A few times a month | State indication | Allowed: each number crossfades in 200 ms. Reduce Motion: instant. |
 | Export progress | Occasional | State indication; the number is data | Bar width follows real progress; no easing for style. |
 | "Saved 2 files" confirmation | Occasional | State indication | Allowed: 160 ms opacity. |

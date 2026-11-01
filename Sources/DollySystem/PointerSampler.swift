@@ -10,6 +10,9 @@ import Foundation
 /// `@unchecked Sendable`: every field is behind `lock`; the timer, the monitor and stop meet there.
 public final class PointerSampler: PointerSampling, @unchecked Sendable {
     public static let rate = 120.0
+    /// The window frame is looked up every 4th sample (30 Hz): windows rarely move mid-take, and
+    /// each lookup asks the window server for a list.
+    static let windowEvery = 4
 
     private struct State {
         var timer: DispatchSourceTimer?
@@ -17,6 +20,7 @@ public final class PointerSampler: PointerSampling, @unchecked Sendable {
         var windows: WindowFrameLogWriter?
         var windowID: UInt32?
         var lastFrame: CGRect?
+        var tick = 0
         var lastFlush = 0.0
         var monitorButtons = ButtonLatch()
         var monitor: Any?
@@ -73,11 +77,16 @@ public final class PointerSampler: PointerSampling, @unchecked Sendable {
         let t = Self.hostNow()
         let location = NSEvent.mouseLocation
         let shape = shapes?.current ?? .arrow
+        let (windowID, tick) = lock.withLock {
+            state.tick &+= 1
+            return (state.windowID, state.tick)
+        }
+        let frame = windowID.flatMap { tick % Self.windowEvery == 1 ? Self.windowFrame($0) : nil }
         lock.withLock {
             let buttons = clickSource == .monitor ? self.state.monitorButtons.sample() : UInt8(truncatingIfNeeded: NSEvent.pressedMouseButtons & 3)
             let state = self.state
             state.pointer?.append(PointerSample(t: t, x: Float(location.x), y: Float(location.y), buttons: buttons, shape: shape))
-            if let id = state.windowID, let frame = Self.windowFrame(id), frame != state.lastFrame {
+            if state.windowID != nil, let frame, frame != state.lastFrame {
                 state.windows?.append(WindowFrameSample(t: t, frame: frame))
                 self.state.lastFrame = frame
             }

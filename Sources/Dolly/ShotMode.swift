@@ -54,9 +54,13 @@ enum ShotMode {
     static func render(_ options: Options) -> Int32 {
         let inputs = ShotScenarios.inputs(fixtures: options.fixtures, scheme: options.scheme)
         let model = ShotScenarios.model(options.scenario, inputs: inputs)
-        let view = EditorView(model: model, showsWindowControls: true) { editor in
-            AnyView(ShotWorkspace.view(editor: editor, scenario: options.scenario, inputs: inputs, scheme: options.scheme))
-        }
+        // The editor steps aside while the Record bar is open, so those shots sit on a desktop.
+        let base = options.scenario.hasPrefix("record-bar")
+            ? AnyView(ShotDesktop(footage: inputs.footage))
+            : AnyView(EditorView(model: model, showsWindowControls: true) { editor in
+                AnyView(ShotWorkspace.view(editor: editor, scenario: options.scenario, inputs: inputs, scheme: options.scheme))
+            })
+        let view = base
         .frame(width: options.size.width, height: options.size.height)
         .overlay(alignment: .top) { ShotOverlays.view(options.scenario, editor: model.editor, footage: inputs.footage) }
         .environment(\.colorScheme, options.scheme)
@@ -90,7 +94,7 @@ enum ShotWorkspace {
                                stage: AnyView(StageView(editor: editor, image: still(editor, inputs), player: nil, isPlaying: false, clicks: clicks)),
                                inspector: AnyView(StudioInspector(editor: editor, clicks: clicks)),
                                timeline: AnyView(TimelineView(editor: editor, clickTimes: clicks.map(\.t),
-                                                              filmstrip: inputs.footage.map { Image(decorative: $0, scale: 1) },
+                                                              filmstrip: Filmstrip(frames: inputs.footage.map { [Image(decorative: $0, scale: 1)] } ?? []),
                                                               playback: nil, isPlaying: false)))
     }
 
@@ -117,6 +121,28 @@ enum ShotWorkspace {
 
 /// Panels that float over the editor in the recording scenarios.
 @MainActor
+/// A stand-in desktop for the Record bar shots: a plain wallpaper and the window being picked.
+private struct ShotDesktop: View {
+    let footage: CGImage?
+
+    /// The picked window, 600 pt tall at the recording's own shape.
+    static func windowSize(_ footage: CGImage?) -> CGSize {
+        guard let footage, footage.height > 0 else { return CGSize(width: 1000, height: 600) }
+        return CGSize(width: 600 * Double(footage.width) / Double(footage.height), height: 600)
+    }
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            LinearGradient(colors: [Color(white: 0.36), Color(white: 0.2)], startPoint: .top, endPoint: .bottom)
+            if let footage {
+                let size = Self.windowSize(footage)
+                Image(decorative: footage, scale: 1).resizable()
+                    .frame(width: size.width, height: size.height).clipShape(RoundedRectangle(cornerRadius: 10)).padding(.top, 150)
+            }
+        }
+    }
+}
+
 enum ShotOverlays {
     /// Shot mode never exports; this only satisfies the sheet's model.
     struct NoExporter: ExportRunning {
@@ -153,10 +179,11 @@ enum ShotOverlays {
             let _ = devices.cameras = [DeviceOption(id: "cam", name: "FaceTime HD Camera")]
             let _ = devices.microphones = [DeviceOption(id: "mic", name: "MacBook Pro Microphone")]
             ZStack(alignment: .top) {
-                // The tape around the chosen window, here the editor's stage.
-                WindowHighlightView().frame(width: 1000, height: 600).padding(.top, 150)
+                // The tape around the chosen window, the recording on the shot's desktop.
+                let window = ShotDesktop.windowSize(footage)
+                WindowHighlightView().frame(width: window.width, height: window.height).padding(.top, 150)
                 VStack(spacing: -16) {
-                    RecordBar(model: .constant(model), windows: [PickableWindow(id: 7, app: "Safari", title: "sdusteric.dev",
+                    RecordBar(model: .constant(model), windows: [PickableWindow(id: 7, app: "Shelf", title: "Tile Board",
                                                                                frame: .zero, displayID: 1)],
                               shortcut: HotkeyCombo.defaultRecord.displayString, devices: devices, record: {}, cancel: {})
                     if camera, let frame = ShotScenarios.cameraFrame {

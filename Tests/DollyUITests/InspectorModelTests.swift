@@ -10,14 +10,14 @@ import Testing
     let clicks = [Click(id: 0, t: 2.4, point: .zero), Click(id: 1, t: 7.9, point: .zero)]
 
     @Test func zoomSubtitle() {
-        #expect(InspectorModel.subtitle(auto, clicks: clicks) == "0:07.3 to 0:09.9, 2.6 s. From your click at 0:07.9.")
+        #expect(InspectorModel.subtitle(auto, clicks: clicks) == "0:07.3 to 0:09.9, 2.6 s.\nFrom your click at 0:07.9.")
     }
 
     @Test func manualZoomSubtitle() {
         var manual = auto
         manual.source = .manual
         manual.clickIDs = []
-        #expect(InspectorModel.subtitle(manual, clicks: clicks) == "0:07.3 to 0:09.9, 2.6 s. Added by you.")
+        #expect(InspectorModel.subtitle(manual, clicks: clicks) == "0:07.3 to 0:09.9, 2.6 s.\nAdded by you.")
     }
 
     @Test func valueTexts() {

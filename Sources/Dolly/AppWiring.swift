@@ -25,7 +25,8 @@ final class EditorController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private var aside = EditorStepAside()
     private let session: TakeSession
-    private var filmstrip: Image?
+    private let filmstrip = Filmstrip()
+    private var filmstripTask: Task<Void, Never>?
     private var saveTask: Task<Void, Never>?
 
     init(paths: DollyPaths, settings: DollyCore.Settings, log: Log) {
@@ -76,6 +77,8 @@ final class EditorController: NSObject, NSWindowDelegate {
             actions.chooseBackdrop = { pick in
                 if let folder = self?.folder { studio.chooseBackdrop(pick, editor: editor, folder: folder) }
             }
+            actions.aimHintSeen = self?.settings.aimHintSeen ?? false
+            actions.aimed = { self?.markAimHintSeen() }
             actions.transcribe = {
                 if let folder = self?.folder { studio.transcribeAgain(editor, folder: folder) }
             }
@@ -189,10 +192,41 @@ final class EditorController: NSObject, NSWindowDelegate {
             reloadTakes()
             return
         }
-        filmstrip = screen.posters[editor.take.id]
+        loadFilmstrip(editor.take, folder: folder)
         screen.editor = editor
         preview.load(editor: editor, folder: folder)
         watchEdits(editor)
+    }
+
+    /// The poster stands in until the timeline's stills are decoded, a few hundred ms for most takes.
+    private func loadFilmstrip(_ take: Take, folder: URL) {
+        filmstripTask?.cancel()
+        filmstrip.frames = screen.posters[take.id].map { [$0] } ?? []
+        let movie = folder.appending(path: TakeStore.movieName)
+        let times = Filmstrip.times(duration: take.duration, count: Filmstrip.count)
+        filmstripTask = Task { [weak self] in
+            let stills = await Self.stills(of: movie, at: times)
+            guard !Task.isCancelled, let self, self.screen.editor?.take.id == take.id, !stills.isEmpty else { return }
+            self.filmstrip.frames = stills.map { Image(decorative: $0, scale: 1) }
+        }
+    }
+
+    /// Square stills cut from the middle of each frame, small enough for a timeline tile.
+    nonisolated private static func stills(of movie: URL, at times: [Double]) async -> [CGImage] {
+        let generator = AVAssetImageGenerator(asset: AVURLAsset(url: movie))
+        generator.maximumSize = CGSize(width: 240, height: 240)
+        let tolerance = CMTime(value: 1, timescale: 4)
+        generator.requestedTimeToleranceBefore = tolerance
+        generator.requestedTimeToleranceAfter = tolerance
+        var stills: [CGImage] = []
+        for t in times {
+            if Task.isCancelled { return [] }
+            guard let image = try? await generator.image(at: CMTime(seconds: t, preferredTimescale: 600)).image else { return [] }
+            let side = min(image.width, image.height)
+            let square = CGRect(x: (image.width - side) / 2, y: (image.height - side) / 2, width: side, height: side)
+            stills.append(image.cropping(to: square) ?? image)
+        }
+        return stills
     }
 
     private func makePoster(_ take: Take, folder: URL) async {
@@ -270,6 +304,12 @@ final class EditorController: NSObject, NSWindowDelegate {
 
     func setExportsFolder(_ path: String) {
         settings.exportsFolder = path
+        saveSettings()
+    }
+
+    private func markAimHintSeen() {
+        guard !settings.aimHintSeen else { return }
+        settings.aimHintSeen = true
         saveSettings()
     }
 
@@ -399,7 +439,7 @@ private struct LiveWorkspace: View {
     let editor: EditorModel
     let preview: PreviewPlayer
     let studio: StudioTasks
-    let filmstrip: Image?
+    let filmstrip: Filmstrip?
     let actions: StudioActions
 
     var body: some View {
@@ -407,7 +447,8 @@ private struct LiveWorkspace: View {
         EditorWorkspace(
             editor: editor,
             stage: AnyView(StageView(editor: editor, image: preview.aimImage, player: preview.player,
-                                     isPlaying: preview.isPlaying, clicks: clicks)),
+                                     isPlaying: preview.isPlaying, clicks: clicks,
+                                     showsAimHint: !actions.aimHintSeen, aimed: actions.aimed)),
             inspector: AnyView(StudioInspector(editor: editor, clicks: clicks, actions: actions,
                                                transcription: studio.status(editor.take.id))),
             timeline: AnyView(TimelineView(editor: editor, clickTimes: clicks.map(\.t), filmstrip: filmstrip,

@@ -2,12 +2,12 @@ import DollyCore
 import SwiftUI
 
 nonisolated public enum InspectorModel {
-    /// "0:07.3 to 0:09.9, 2.6 s. From your click at 0:07.9." or "... Added by you."
+    /// "0:07.3 to 0:09.9, 2.6 s." then, on its own line, "From your click at 0:07.9." or "Added by you."
     public static func subtitle(_ zoom: Zoom, clicks: [Click]) -> String {
         let span = "\(TimeText.clock(zoom.start)) to \(TimeText.clock(zoom.end)), \(TimeText.seconds(zoom.length))."
-        if zoom.source == .manual { return span + " Added by you." }
+        if zoom.source == .manual { return span + "\nAdded by you." }
         guard let id = zoom.clickIDs.first, let click = clicks.first(where: { $0.id == id }) else { return span }
-        return span + " From your click at \(TimeText.clock(click.t))."
+        return span + "\nFrom your click at \(TimeText.clock(click.t))."
     }
 
     public static func depthText(_ d: Double) -> String { String(format: "%.1f×", d) }

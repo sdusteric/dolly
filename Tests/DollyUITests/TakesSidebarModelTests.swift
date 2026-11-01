@@ -37,8 +37,8 @@ import Testing
     }
 
     @Test func footerSaysWhereAndHowMuch() {
-        #expect(TakesSidebarModel.footer(count: 4, bytes: 1_900_000_000) == "Takes live in ~/Movies/Dolly. 4 takes, 1.9 GB.")
-        #expect(TakesSidebarModel.footer(count: 1, bytes: 52_000_000) == "Takes live in ~/Movies/Dolly. 1 take, 52 MB.")
+        #expect(TakesSidebarModel.footer(count: 4, bytes: 1_900_000_000) == "Takes live in ~/Movies/Dolly.\n4 takes, 1.9 GB.")
+        #expect(TakesSidebarModel.footer(count: 1, bytes: 52_000_000) == "Takes live in ~/Movies/Dolly.\n1 take, 52 MB.")
         #expect(TakesSidebarModel.footer(count: 0, bytes: 0) == "Takes will live in ~/Movies/Dolly.")
     }
 

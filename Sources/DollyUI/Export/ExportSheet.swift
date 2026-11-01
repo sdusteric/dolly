@@ -218,12 +218,12 @@ public struct ExportSheet: View {
     private var settings: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Quality").font(Theme.Font.bodyMedium)
+                Text("Frame rate").font(Theme.Font.bodyMedium)
                 Spacer()
                 if shot {
                     ShotControls.segmented(["60 fps", "30 fps"], selected: model.fps == 60 ? 0 : 1).frame(width: 180)
                 } else {
-                    Picker("Quality", selection: $model.fps) {
+                    Picker("Frame rate", selection: $model.fps) {
                         Text("60 fps").tag(60)
                         Text("30 fps").tag(30)
                     }

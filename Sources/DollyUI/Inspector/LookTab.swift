@@ -18,10 +18,12 @@ struct LookTab: View {
         let look = editor.take.look
         VStack(alignment: .leading, spacing: 0) {
             Group {
-                if shot { content(look) } else { ScrollView { content(look) }.scrollIndicators(.never) }
+                if shot { content(look) } else { ScrollView { content(look).padding(.bottom, 12) }.scrollIndicators(.never) }
             }
             .frame(minHeight: 0, maxHeight: .infinity, alignment: .top)
             .clipped()
+            // The pinned button sits below a hairline so the scrolled rows above it read as cut, not crowded.
+            Rectangle().fill(Theme.control.color).frame(height: 1)
             Button {
                 actions.useForNewTakes(editor.take.look)
                 withAnimation(reduceMotion ? nil : .easeOut(duration: Theme.Motion.saved)) { savedDefault = true }
@@ -63,7 +65,7 @@ struct LookTab: View {
                         editor: editor) { v in edit { $0.corners = v } }
             rows.slider("Shadow", text: StudioInspectorModel.percentText(look.shadow), value: look.shadow, range: 0...1, step: 0.05,
                         editor: editor) { v in edit { $0.shadow = v } }
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
                 rows.header("Pointer")
                 rows.slider("Size", text: InspectorModel.depthText(look.pointerScale), value: look.pointerScale, range: 1...3,
                             step: 0.25, editor: editor) { v in edit { $0.pointerScale = v } }
@@ -71,6 +73,7 @@ struct LookTab: View {
                 rows.toggle("Smooth path", look.smoothPointer) { v in edit { $0.smoothPointer = v } }
                 rows.toggle("Hide when still", look.hideWhenStill) { v in edit { $0.hideWhenStill = v } }
             }
+            .padding(.top, 8)
         }
     }
 

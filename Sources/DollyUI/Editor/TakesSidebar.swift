@@ -28,7 +28,7 @@ nonisolated public enum TakesSidebarModel {
     public static func footer(count: Int, bytes: Int64) -> String {
         guard count > 0 else { return "Takes will live in ~/Movies/Dolly." }
         let size = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .decimal)
-        return "Takes live in ~/Movies/Dolly. \(count) \(count == 1 ? "take" : "takes"), \(size)."
+        return "Takes live in ~/Movies/Dolly.\n\(count) \(count == 1 ? "take" : "takes"), \(size)."
     }
 }
 

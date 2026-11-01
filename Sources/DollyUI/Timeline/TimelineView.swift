@@ -5,11 +5,11 @@ import SwiftUI
 /// The timeline (spec 6.3, studio spec item 6): play and time, the length line, then the ruler and
 /// five lanes. Zooms are pink tape strips; the strip and the stage's corners are one selection. The
 /// camera lane shows where the webcam shows; captions are chips. Drags follow the pointer 1:1 and
-/// each is one undo step; a strip added or removed bridges with 160 ms (spec 10.6).
+/// each is one undo step; a strip or caption added or removed bridges with 160 ms (spec 10.6).
 public struct TimelineView: View {
     @Bindable var editor: EditorModel
     let clickTimes: [Double]
-    let filmstrip: Image?
+    let filmstrip: Filmstrip?
     let playback: (any PlaybackControlling)?
     let isPlaying: Bool
     @State private var drag: DragState?
@@ -24,7 +24,7 @@ public struct TimelineView: View {
         var moved = false
     }
 
-    public init(editor: EditorModel, clickTimes: [Double], filmstrip: Image?, playback: (any PlaybackControlling)?, isPlaying: Bool) {
+    public init(editor: EditorModel, clickTimes: [Double], filmstrip: Filmstrip?, playback: (any PlaybackControlling)?, isPlaying: Bool) {
         self.editor = editor
         self.clickTimes = clickTimes
         self.filmstrip = filmstrip
@@ -70,12 +70,7 @@ public struct TimelineView: View {
             }
             .buttonStyle(IconButtonStyle())
             .accessibilityLabel(isPlaying ? "Pause" : "Play")
-            HStack(spacing: 0) {
-                Text(TimeText.clock(editor.playhead)).foregroundStyle(Theme.ink.color)
-                Text(" / \(TimeText.clock(editor.take.trim.upperBound - editor.take.trim.lowerBound))").foregroundStyle(Theme.muted.color)
-            }
-            .font(.system(size: 15, weight: .medium))
-            .monospacedDigit()
+            PlayClock(editor: editor)
             Spacer()
             Text(PlatformLimits.lengthLine(editor.take.trim.upperBound - editor.take.trim.lowerBound))
                 .font(Theme.Font.body)
@@ -97,7 +92,8 @@ public struct TimelineView: View {
 
     private func lanes(_ layout: TimelineLayout) -> some View {
         ZStack(alignment: .topLeading) {
-            Canvas { context, size in draw(&context, size: size, layout: layout) }
+            let frames = filmstrip?.frames ?? []
+            Canvas { context, size in draw(&context, size: size, layout: layout, frames: frames) }
                 .accessibilityHidden(true)
             gestureLayer(layout)
             ForEach(Array(editor.take.zooms.enumerated()), id: \.element.id) { index, zoom in
@@ -107,6 +103,7 @@ public struct TimelineView: View {
             let captions = editor.take.captions?.items ?? []
             ForEach(Array(captions.enumerated()), id: \.element.id) { index, caption in
                 chip(caption, index: index, count: captions.count, layout: layout)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.97)))
             }
             if let ghost, let hit = drag?.hit {
                 let camera = { if case .cameraBar = hit { true } else { false } }()
@@ -117,10 +114,11 @@ public struct TimelineView: View {
                     .offset(x: layout.x(for: ghost.lowerBound), y: lane.minY + (camera ? TimelineLayout.laneInset : TimelineLayout.stripTop))
                     .allowsHitTesting(false)
             }
-            playhead(layout)
+            PlayheadMark(editor: editor, layout: layout)
         }
         .coordinateSpace(.named("lanes"))
         .animation(.easeOut(duration: Theme.Motion.stripBridge), value: editor.take.zooms.map(\.id))
+        .animation(.easeOut(duration: Theme.Motion.stripBridge), value: editor.take.captions?.items.map(\.id))
         .onContinuousHover(coordinateSpace: .named("lanes")) { phase in
             guard case .active(let p) = phase else { NSCursor.arrow.set(); return }
             switch layout.hit(p, zooms: editor.take.zooms, trim: editor.take.trim, camera: editor.take.camera,
@@ -133,7 +131,7 @@ public struct TimelineView: View {
         }
     }
 
-    private func draw(_ context: inout GraphicsContext, size: CGSize, layout: TimelineLayout) {
+    private func draw(_ context: inout GraphicsContext, size: CGSize, layout: TimelineLayout, frames: [Image]) {
         let ink = Theme.ink.color, muted = Theme.muted.color, control = Theme.control.color, raised = Theme.raised.color
         for tick in layout.rulerTicks {
             context.fill(Path(CGRect(x: tick.x, y: 0, width: 1, height: 14)), with: .color(control))
@@ -144,12 +142,14 @@ public struct TimelineView: View {
         let videoRect = CGRect(x: 0, y: video.minY, width: size.width, height: video.height)
         let rounded = Path(roundedRect: videoRect, cornerRadius: Theme.Size.controlRadius)
         context.fill(rounded, with: .color(raised))
-        if let filmstrip {
+        if !frames.isEmpty {
             context.drawLayer { layer in
                 layer.clip(to: rounded)
                 var x: CGFloat = 0
                 while x < size.width {
-                    layer.draw(filmstrip, in: CGRect(x: x, y: videoRect.minY, width: videoRect.height, height: videoRect.height))
+                    let t = layout.t(for: x + videoRect.height / 2)
+                    let frame = frames[Filmstrip.index(at: t, duration: editor.take.duration, count: frames.count)]
+                    layer.draw(frame, in: CGRect(x: x, y: videoRect.minY, width: videoRect.height, height: videoRect.height))
                     x += videoRect.height
                 }
             }
@@ -280,16 +280,6 @@ public struct TimelineView: View {
             }
     }
 
-    private func playhead(_ layout: TimelineLayout) -> some View {
-        let x = layout.x(for: editor.playhead)
-        return ZStack(alignment: .top) {
-            Rectangle().fill(Theme.ink.color).frame(width: 2, height: TimelineLayout.height + 4)
-            RoundedRectangle(cornerRadius: 2).fill(Theme.ink.color).frame(width: 12, height: 8)
-        }
-        .offset(x: x - 6, y: -4)
-        .allowsHitTesting(false)
-    }
-
     private func stripGesture(_ zoom: Zoom, layout: TimelineLayout) -> some Gesture {
         DragGesture(minimumDistance: 0, coordinateSpace: .named("lanes"))
             .onChanged { value in
@@ -360,5 +350,34 @@ public struct TimelineView: View {
                     ghost = nil
                     drag = nil
                 })
+    }
+}
+
+/// The clock and the playhead line are their own views so that playback, which moves the playhead
+/// 30 times a second, redraws only them and not the lanes' Canvas.
+private struct PlayClock: View {
+    let editor: EditorModel
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Text(TimeText.clock(editor.playhead)).foregroundStyle(Theme.ink.color)
+            Text(" / \(TimeText.clock(editor.take.trim.upperBound - editor.take.trim.lowerBound))").foregroundStyle(Theme.muted.color)
+        }
+        .font(.system(size: 15, weight: .medium))
+        .monospacedDigit()
+    }
+}
+
+private struct PlayheadMark: View {
+    let editor: EditorModel
+    let layout: TimelineLayout
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            Rectangle().fill(Theme.ink.color).frame(width: 2, height: TimelineLayout.height + 4)
+            RoundedRectangle(cornerRadius: 2).fill(Theme.ink.color).frame(width: 12, height: 8)
+        }
+        .offset(x: layout.x(for: editor.playhead) - 6, y: -4)
+        .allowsHitTesting(false)
     }
 }

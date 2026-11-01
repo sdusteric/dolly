@@ -10,14 +10,19 @@ public struct StageView: View {
     let player: AVPlayer?
     let isPlaying: Bool
     let clicks: [Click]
+    let aimed: () -> Void
+    @State private var showsAimHint: Bool
     @FocusState private var focused: Bool
 
-    public init(editor: EditorModel, image: CGImage?, player: AVPlayer?, isPlaying: Bool, clicks: [Click]) {
+    public init(editor: EditorModel, image: CGImage?, player: AVPlayer?, isPlaying: Bool, clicks: [Click],
+                showsAimHint: Bool = true, aimed: @escaping () -> Void = {}) {
         self.editor = editor
         self.image = image
         self.player = player
         self.isPlaying = isPlaying
         self.clicks = clicks
+        self.aimed = aimed
+        _showsAimHint = State(initialValue: showsAimHint)
     }
 
     private var aimZoom: Zoom? { isPlaying ? nil : editor.selectedZoom.flatMap { editor.zoom($0) } }
@@ -34,15 +39,23 @@ public struct StageView: View {
                     ZStack(alignment: .topLeading) {
                         content.frame(width: size.width, height: size.height)
                         if let zoom = aimZoom {
-                            AimOverlay(model: AimOverlayModel(take: editor.take, clicks: clicks, stageSize: size), zoom: zoom, editor: editor)
-                            Text(AimOverlayModel.hint)
-                                .font(Theme.Font.meta)
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
-                                .background(RoundedRectangle(cornerRadius: 4).fill(.black.opacity(0.55)))
-                                .offset(x: 12, y: size.height - 32)
-                                .allowsHitTesting(false)
+                            AimOverlay(model: AimOverlayModel(take: editor.take, clicks: clicks, stageSize: size), zoom: zoom, editor: editor) {
+                                if showsAimHint {
+                                    withAnimation(.easeOut(duration: Theme.Motion.saved)) { showsAimHint = false }
+                                    aimed()
+                                }
+                            }
+                            if showsAimHint {
+                                Text(AimOverlayModel.hint)
+                                    .font(Theme.Font.meta)
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(RoundedRectangle(cornerRadius: 4).fill(.black.opacity(0.55)))
+                                    .offset(x: 12, y: size.height - 32)
+                                    .allowsHitTesting(false)
+                                    .transition(.opacity)
+                            }
                         } else if !isPlaying {
                             CameraDragOverlay(editor: editor, stageSize: size)
                         }

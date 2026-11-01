@@ -9,6 +9,7 @@ struct AimOverlay: View {
     let model: AimOverlayModel
     let zoom: Zoom
     let editor: EditorModel
+    var aimed: () -> Void = {}
     @State private var start: Zoom?
 
     static let leg: CGFloat = 26
@@ -119,6 +120,7 @@ struct AimOverlay: View {
 
     private func end() {
         editor.endGesture()
+        if start != nil { aimed() }
         start = nil
     }
 }

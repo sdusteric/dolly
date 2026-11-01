@@ -177,35 +177,33 @@ public struct TakeCardView: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ZStack(alignment: .topLeading) {
-                Button(action: edit) {
-                    ZStack(alignment: .bottomLeading) {
-                        posterImage
-                        Text(TimeText.short(model.duration))
-                            .font(Theme.Font.meta.weight(.semibold)).monospacedDigit()
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 6).frame(height: 20)
-                            .background(Capsule().fill(.black.opacity(0.6)))
-                            .padding(6)
-                    }
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            Button(action: edit) {
+                ZStack(alignment: .bottomLeading) {
+                    posterImage
+                    Text(TimeText.short(model.duration))
+                        .font(Theme.Font.meta.weight(.semibold)).monospacedDigit()
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6).frame(height: 20)
+                        .background(Capsule().fill(.black.opacity(0.6)))
+                        .padding(6)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Open \(model.name) in the editor")
-
-                Button(action: close) {
-                    Image(systemName: "xmark").font(.system(size: 10, weight: .bold)).foregroundStyle(.white)
-                        .frame(width: 22, height: 22)
-                        .background(Circle().fill(.black.opacity(0.6)))
-                }
-                .buttonStyle(.plain)
-                .padding(6)
-                .accessibilityLabel("Close")
+                .clipShape(RoundedRectangle(cornerRadius: 8))
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open \(model.name) in the editor")
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(model.name).font(Theme.Font.display(14)).lineLimit(1).truncationMode(.tail)
-                Text(model.meta).font(Theme.Font.meta).foregroundStyle(Theme.muted.color)
+            // Close sits with the title, off the poster, so it never covers what was recorded.
+            HStack(alignment: .top, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(model.name).font(Theme.Font.display(14)).lineLimit(1).truncationMode(.tail)
+                    Text(model.meta).font(Theme.Font.meta).foregroundStyle(Theme.muted.color)
+                }
+                Spacer(minLength: 0)
+                Button(action: close) {
+                    Image(systemName: "xmark").font(.system(size: 10, weight: .bold)).foregroundStyle(Theme.muted.color)
+                }
+                .buttonStyle(IconButtonStyle())
+                .accessibilityLabel("Close")
             }
 
             HStack(spacing: 8) {

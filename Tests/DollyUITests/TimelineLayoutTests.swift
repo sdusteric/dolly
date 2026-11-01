@@ -108,3 +108,18 @@ import Testing
         #expect(abs(m.playhead - (20 + 1.0 / 60)) < 0.0001)
     }
 }
+
+@Suite struct FilmstripTests {
+    @Test func framesAreTakenAtTheMiddleOfEvenSlices() {
+        #expect(Filmstrip.times(duration: 40, count: 4) == [5, 15, 25, 35])
+        #expect(Filmstrip.times(duration: 0, count: 4).isEmpty)
+    }
+
+    @Test func eachTileShowsTheFrameForItsTime() {
+        #expect(Filmstrip.index(at: 0, duration: 40, count: 4) == 0)
+        #expect(Filmstrip.index(at: 14.9, duration: 40, count: 4) == 1)
+        #expect(Filmstrip.index(at: 40, duration: 40, count: 4) == 3)
+        #expect(Filmstrip.index(at: 99, duration: 40, count: 4) == 3)
+        #expect(Filmstrip.index(at: 5, duration: 0, count: 4) == 0)
+    }
+}

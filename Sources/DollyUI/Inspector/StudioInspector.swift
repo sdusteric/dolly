@@ -27,6 +27,9 @@ public struct StudioActions {
     public var useForNewTakes: (Look) -> Void = { _ in }
     public var chooseBackdrop: (BackdropPick) -> Void = { _ in }
     public var transcribe: () -> Void = {}
+    /// The first drag of a zoom's corners on the stage; the hint is not shown again after it.
+    public var aimed: () -> Void = {}
+    public var aimHintSeen = false
     public init() {}
 }
 
@@ -90,7 +93,7 @@ public struct StudioInspector: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            StudioSegmented(StudioTab.allCases, selected: tab, label: \.label, itemPadding: 0) { tab = $0 }
+            StudioSegmented(StudioTab.allCases, selected: tab, label: \.label, proportional: true) { tab = $0 }
                 .accessibilityLabel("Inspector")
             Group {
                 switch tab {
@@ -121,18 +124,23 @@ struct StudioSegmented<Item: Hashable>: View {
     let label: (Item) -> String
     let choose: (Item) -> Void
     var itemPadding: CGFloat = 8
+    /// Long and short labels share the spare width equally instead of getting equal slots, so a
+    /// long label in a tight row ("Captions" in the 288 pt inspector) keeps the same inset as the rest.
+    var proportional = false
 
     init(_ items: [Item], selected: Item, label: @escaping (Item) -> String, itemPadding: CGFloat = 8,
-         choose: @escaping (Item) -> Void) {
+         proportional: Bool = false, choose: @escaping (Item) -> Void) {
         self.items = items
         self.selected = selected
         self.label = label
         self.itemPadding = itemPadding
+        self.proportional = proportional
         self.choose = choose
     }
 
     var body: some View {
-        HStack(spacing: 0) {
+        let row = proportional ? AnyLayout(SegmentRow()) : AnyLayout(HStackLayout(spacing: 0))
+        row {
             ForEach(items, id: \.self) { item in
                 let on = item == selected
                 Button { choose(item) } label: {
@@ -151,6 +159,26 @@ struct StudioSegmented<Item: Hashable>: View {
         }
         .padding(2)
         .background(RoundedRectangle(cornerRadius: Theme.Size.controlRadius + 2).fill(Theme.active.color))
+    }
+}
+
+/// Lays items out at their ideal widths and splits what is left of the row equally among them.
+struct SegmentRow: Layout {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        let ideal = sizes.reduce(0) { $0 + $1.width }
+        return CGSize(width: max(proposal.width ?? ideal, ideal), height: sizes.map(\.height).max() ?? 0)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        let spare = max(bounds.width - sizes.reduce(0) { $0 + $1.width }, 0) / CGFloat(max(subviews.count, 1))
+        var x = bounds.minX
+        for (view, size) in zip(subviews, sizes) {
+            let width = size.width + spare
+            view.place(at: CGPoint(x: x, y: bounds.minY), proposal: ProposedViewSize(width: width, height: bounds.height))
+            x += width
+        }
     }
 }
 

@@ -109,6 +109,13 @@ import Testing
         #expect(!old.recordCamera)
     }
 
+    @Test func aimHintIsRememberedOnceSeen() throws {
+        #expect(try !JSONDecoder().decode(DollyCore.Settings.self, from: Data("{}".utf8)).aimHintSeen)
+        var settings = DollyCore.Settings()
+        settings.aimHintSeen = true
+        #expect(try JSONDecoder().decode(DollyCore.Settings.self, from: JSONEncoder().encode(settings)).aimHintSeen)
+    }
+
     @Test func devicePermissionCopy() {
         #expect(PermissionWindowModel.camera.message
             == "Dolly needs Camera to record your camera. It never opens the camera unless the Camera switch is on.")
