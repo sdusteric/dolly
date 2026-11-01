@@ -18,11 +18,12 @@ public enum WriterInputAppend {
 
     static let retryNanoseconds: UInt64 = 1_000_000
     /// A stalled writer fails the recording instead of hanging it.
-    static let timeoutSeconds: Double = 30
+    public static let timeoutSeconds: Double = 30
 
     /// Calls `attempt` until it returns true. Throws what `attempt` throws, or `TimedOut`.
     public static func untilAccepted(
         giveUp: () -> Bool = { false },
+        timeoutSeconds: Double = timeoutSeconds,
         _ attempt: () throws -> Bool
     ) async throws -> Outcome {
         let deadline = DispatchTime.now().uptimeNanoseconds + UInt64(timeoutSeconds * 1_000_000_000)

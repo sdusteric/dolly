@@ -74,36 +74,23 @@ public final class Exporter: ExportRunning {
             try writer.start()
             writer.startSession(atSourceTime: .zero)
             let expected = max(duration * Double(plan.fps), 1)
-            // Video and audio are read in step, whichever is behind first: the reader stalls when one
-            // output runs far ahead of the other.
             var frames = 0.0
             var reported = -1.0
-            var videoAt = -Double.infinity, audioAt = -Double.infinity
-            var videoDone = false, audioDone = audioProvider == nil
-            while !videoDone || !audioDone {
-                try Task.checkCancellation()
-                if !videoDone && (audioDone || videoAt <= audioAt) {
-                    guard let sample = try await provider.next() else {
-                        receiver.finish()
-                        videoDone = true
-                        continue
-                    }
-                    videoAt = sample.presentationTimeStamp.seconds
-                    _ = try await WriterInputAppend.untilAccepted { try receiver.appendImmediately(sample) }
-                    frames += Double(sample.sampleCount)
-                    let fraction = min(frames / expected, 0.99)
-                    if fraction - reported >= 0.05 {
-                        progress(fraction)
-                        reported = fraction
-                    }
-                } else if let audioProvider, let audioReceiver {
-                    guard let sample = try await audioProvider.next() else {
-                        audioReceiver.finish()
-                        audioDone = true
-                        continue
-                    }
-                    audioAt = sample.presentationTimeStamp.seconds
-                    _ = try await WriterInputAppend.untilAccepted { try audioReceiver.appendImmediately(sample) }
+            let video = InterleavedStream(next: { try await provider.next() }, time: { $0.presentationTimeStamp.seconds },
+                                          append: { try receiver.appendImmediately($0) }, finish: { receiver.finish() })
+            let audio = audioProvider.flatMap { provider in
+                audioReceiver.map { receiver in
+                    InterleavedStream(next: { try await provider.next() }, time: { $0.presentationTimeStamp.seconds },
+                                      append: { try receiver.appendImmediately($0) }, finish: { receiver.finish() })
+                }
+            }
+            try await InterleavedWrite.run(video: video, audio: audio) { sample, isVideo in
+                guard isVideo else { return }
+                frames += Double(sample.sampleCount)
+                let fraction = min(frames / expected, 0.99)
+                if fraction - reported >= 0.05 {
+                    progress(fraction)
+                    reported = fraction
                 }
             }
             await writer.finishWriting()
