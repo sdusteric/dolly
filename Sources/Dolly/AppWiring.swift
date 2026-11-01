@@ -84,7 +84,7 @@ final class EditorController: NSObject, NSWindowDelegate {
             }
             return AnyView(LiveWorkspace(editor: editor, preview: preview, studio: studio, filmstrip: self?.filmstrip, actions: actions))
         }
-        window.contentView = NSHostingView(rootView: root)
+        window.contentView = NSHostingView(rootView: root.focusEffectDisabled())
         window.center()
         window.setFrameAutosaveName("DollyEditor")
         return window
@@ -379,7 +379,7 @@ final class EditorController: NSObject, NSWindowDelegate {
                 if let sheet { window?.endSheet(sheet) }
             }
         )
-        sheet.contentView = NSHostingView(rootView: view)
+        sheet.contentView = NSHostingView(rootView: view.focusEffectDisabled())
         sheet.setContentSize(sheet.contentView?.fittingSize ?? CGSize(width: 520, height: 520))
         window.beginSheet(sheet)
     }
@@ -532,8 +532,11 @@ final class PreviewPlayer: PlaybackControlling {
             guard !Task.isCancelled, let self, let editor, let folder else { return }
             let take = editor.take
             do {
+                // Twice the canvas on a Retina screen: the stage is wider than 1080p there, and a zoom
+                // would otherwise show a stretched frame instead of the recording's own pixels.
+                let scale = min(NSScreen.main?.backingScaleFactor ?? 1, 2)
                 let built = try await PlayerItemFactory.composition(take: take, folder: folder, shape: take.currentShape, fps: 60,
-                                                                    pointer: editor.pointer)
+                                                                    pointer: editor.pointer, renderScale: scale)
                 guard !Task.isCancelled else { return }
                 install(AVPlayerItem(asset: built.asset), videoComposition: built.videoComposition, take: take)
             } catch {

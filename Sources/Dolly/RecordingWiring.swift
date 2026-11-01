@@ -38,6 +38,10 @@ final class RecordingWiring {
     private var startedAt = Date()
     private var bar = RecordBarModel()
     private var windows: [PickableWindow] = []
+    /// While the bar is open: the window last seen in front, and the timer that checks it.
+    private var seenFront: UInt32?
+    private var frontWatch: Timer?
+    private var refreshingWindows = false
 
     init(paths: DollyPaths, settings: DollyCore.Settings) {
         self.paths = paths
@@ -130,6 +134,35 @@ final class RecordingWiring {
             if bar.camera, PermissionProbe.camera() != .allowed { bar.camera = false }
             if bar.microphone, PermissionProbe.microphone() != .allowed { bar.microphone = false }
             showBar()
+            watchFront()
+        }
+    }
+
+    /// Clicking another window while the bar is open picks it. A window switch inside one app sends
+    /// no notification Dolly may use, so this reads the front window four times a second, only while
+    /// the bar is open.
+    private func watchFront() {
+        seenFront = WindowCatalog.frontWindowID()
+        frontWatch?.invalidate()
+        frontWatch = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.checkFront() }
+        }
+    }
+
+    private func checkFront() {
+        guard barPanel != nil, let front = WindowCatalog.frontWindowID(), front != seenFront else { return }
+        seenFront = front
+        if bar.follow(frontWindow: front, in: windows) { return showBar() }
+        guard !windows.contains(where: { $0.id == front }), !refreshingWindows else { return }
+        // A window the bar has not listed yet, such as one just opened.
+        refreshingWindows = true
+        Task {
+            let fresh = await WindowCatalog.windows()
+            refreshingWindows = false
+            guard barPanel != nil else { return }
+            windows = fresh
+            _ = bar.follow(frontWindow: front, in: windows)
+            showBar()
         }
     }
 
@@ -151,7 +184,7 @@ final class RecordingWiring {
         devices.toggleMicrophone = { [weak self] in self?.toggle(camera: false) }
         let view = RecordBar(model: binding, windows: windows, shortcut: shortcut, devices: devices,
                              record: { [weak self] in self?.record() }, cancel: { [weak self] in self?.cancelBar() })
-        let host = NSHostingView(rootView: view)
+        let host = NSHostingView(rootView: view.focusEffectDisabled())
         let size = host.fittingSize
         let screen = NSScreen.main?.visibleFrame ?? .zero
         let panel = barPanel ?? KeyablePanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
@@ -226,6 +259,9 @@ final class RecordingWiring {
     }
 
     private func closeBar() {
+        frontWatch?.invalidate()
+        frontWatch = nil
+        seenFront = nil
         previewPanel.hide()
         cameraPreview.stop()
         previewing = nil
@@ -396,7 +432,7 @@ final class RecordingWiring {
     private func present(_ view: PermissionWindowView, title: String) {
         let window = permissionWindow ?? NSWindow(contentRect: .zero, styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.title = title
-        window.contentView = NSHostingView(rootView: view)
+        window.contentView = NSHostingView(rootView: view.focusEffectDisabled())
         window.setContentSize(window.contentView?.fittingSize ?? CGSize(width: 440, height: 200))
         window.center()
         window.isReleasedWhenClosed = false

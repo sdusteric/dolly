@@ -60,7 +60,7 @@ Window (default), Area, Display. Window uses `SCContentFilter(desktopIndependent
 
 The Record bar is a small floating panel (not a window in the Dock's sense) near the top of the screen: target buttons, "System audio" and "Microphone" toggles (both off by default), Record. Snap's HUD is the reference.
 
-While the bar is open the editor window leaves the screen, so the owner can see and pick what is behind it. If they cancel, it comes back where it was; once a recording starts, it stays away and the take card brings it back.
+While the bar is open the editor window leaves the screen, so the owner can see and pick what is behind it. The Window target follows the owner: clicking another window (another app, or another window of the same app) while the bar is open picks it, and the window menu still picks any window by hand. Dolly reads the front window from the window list four times a second, only while the bar is open. If they cancel, it comes back where it was; once a recording starts, it stays away and the take card brings it back.
 
 ### 4.2 Capture
 
@@ -170,7 +170,8 @@ Always below: **Look**: Background (five flat colors plus a picture of the owner
 
 ### 6.5 Empty, first-run and error states
 
-- No takes yet: opening Dolly (launch, the Dock, Shelf) goes straight to the Record bar, since the editor has nothing to show. Opened from Window > Editor, the sheet shows one sentence and the Record button with its shortcut: "Record a window, an area or the whole screen. Dolly zooms in where you click."
+- Launch and the Dock open the Record bar unless a take is open in this run, so a fresh launch never brings back the last recording. Window > Editor and Shelf's open-latest action still reach the takes.
+- No takes yet: the Record bar, since the editor has nothing to show. Opened from Window > Editor, the sheet shows one sentence and the Record button with its shortcut: "Record a window, an area or the whole screen. Dolly zooms in where you click."
 - First Record without Screen Recording permission: Snap's first-run pattern (a window that says why, one button that asks macOS, then a hint if it stays denied).
 - Take with no clicks: the Zoom lane shows "No clicks in this take. Press Z to add a zoom at the playhead."
 - A take whose files are missing or unreadable: the sidebar row says "Can't open this take" with Show in Finder.
@@ -179,7 +180,7 @@ Always below: **Look**: Background (five flat colors plus a picture of the owner
 
 - Export opens a sheet attached to the window: the four shapes as **plates** side by side on one baseline (direction B's discipline, kept here), each showing the frame at the playhead in that shape, with a checkbox. The current shape is checked. Below: frame rate (60 fps or 30 fps; H.264), the folder (default `~/Movies/Dolly`), Export.
 - Sizes: 16:9 1920 × 1080, 1:1 1080 × 1080, 4:5 1080 × 1350, 9:16 1080 × 1920. H.264 High profile, AAC 48 kHz when there is audio, `+faststart` (moov atom first) so uploads start fast. Bit rate about 12 Mbit/s at 1080p60 **(my call)**; a 48 s clip is about 70 MB.
-- Rendering: an `AVVideoCompositing` compositor (Core Image on Metal) that draws background, rounded recording with shadow, the camera transform and the pointer, used by both the preview player and `AVAssetWriter` export. Export runs in the background with a progress bar per shape in the sheet and in the toolbar; the editor stays usable.
+- Rendering: an `AVVideoCompositing` compositor (Core Image on Metal) that draws background, rounded recording with shadow, the camera transform and the pointer, used by both the preview player and `AVAssetWriter` export. The preview renders at twice the export canvas on a Retina screen (same picture, more pixels), so a zoom shows the recording's own Retina detail instead of a stretched 1080p frame; the pointer, ring and caption bitmaps are drawn at that density too. Export runs in the background with a progress bar per shape in the sheet and in the toolbar; the editor stays usable.
 - Done: "Saved 2 files" with Copy (puts the file URLs on the pasteboard so a browser upload field accepts a paste) and Show in Finder. File names: `<take name> 16x9.mp4`.
 - Platform limits (length, file size, resolution, fps) are checked before export with plain warnings and never block: the owner may have a paid tier.
 
@@ -274,7 +275,7 @@ Shapes: sheet 16 pt corners, inspector 12, controls 6, tape strips square (tape 
 
 - Every text pair 4.5:1 or better in light and dark (table above). Increase Contrast darkens muted text to ink and adds a 1 pt ink edge to tape strips.
 - Nothing by color alone: a zoom is a strip with a depth figure and a name; the selected one has an ink outline and handles.
-- Full keyboard use of the timeline and stage (6.2, 6.3). Visible focus ring: 2 pt ink with a 2 pt gap.
+- Full keyboard use of the timeline and stage (6.2, 6.3). No focus rings anywhere (the owner's call, 2026-11-01): keys still reach the focused stage or timeline, but nothing outlines it.
 - VoiceOver: each zoom is an element "Zoom 2 of 5, 0:07.4 to 0:10.1, 2.0 times, holds on Run check up", adjustable with the rotor actions Move earlier, Move later, Deeper, Shallower, Remove. The stage in Aim mode exposes the same element.
 - Reduce Motion affects the editor UI only (10.6). The exported clip is the owner's content and keeps its zooms.
 

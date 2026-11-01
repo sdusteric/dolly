@@ -20,10 +20,13 @@ final class DollyInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
     /// The webcam's track in the composition, and how to draw it.
     let webcam: (trackID: CMPersistentTrackID, track: CameraTrack)?
     let captions: CaptionTrack?
+    /// Output pixels per canvas pixel. The scale is applied after composing, and Core Image folds it
+    /// into how it samples the recording, so a zoom keeps a Retina recording's own detail.
+    let renderScale: Double
 
     init(timeRange: CMTimeRange, trackID: CMPersistentTrackID, composer: FrameComposer, camera: CameraPath,
          pointer: PointerPath?, recordingOffset: Double, webcam: (trackID: CMPersistentTrackID, track: CameraTrack)? = nil,
-         captions: CaptionTrack? = nil) {
+         captions: CaptionTrack? = nil, renderScale: Double = 1) {
         self.timeRange = timeRange
         self.trackID = trackID
         requiredSourceTrackIDs = [trackID, webcam?.trackID].compactMap { $0 }.map { NSNumber(value: $0) }
@@ -33,6 +36,7 @@ final class DollyInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
         self.recordingOffset = recordingOffset
         self.webcam = webcam
         self.captions = captions
+        self.renderScale = renderScale
     }
 }
 
@@ -71,16 +75,19 @@ final class DollyCompositor: NSObject, AVVideoCompositing, @unchecked Sendable {
         let webcamBuffer = webcam.flatMap { request.sourceReadOnlyPixelBuffer(byTrackID: $0.trackID) }
         let caption = instruction.captions?.caption(at: t)?.text
         // Every buffer is only valid inside its closure, so the render happens in there.
-        let bounds = CGRect(origin: .zero, size: instruction.composer.layout.canvas)
+        let r = instruction.renderScale
+        let canvas = instruction.composer.layout.canvas
+        let bounds = CGRect(x: 0, y: 0, width: canvas.width * r, height: canvas.height * r)
         source.withUnsafeBuffer { sourceBuffer in
             let recording = CIImage(cvPixelBuffer: sourceBuffer)
             let frame = { (cameraFrame: CIImage?) in
-                instruction.composer.compose(
+                let composed = instruction.composer.compose(
                     recording: recording, camera: instruction.camera.camera(at: t),
                     pointer: pointer?.position(at: t).map { ($0, pointer?.shape(at: t) ?? .arrow) },
                     ring: pointer?.ring(at: t), cameraFrame: cameraFrame,
                     cameraState: webcam.map { ($0.track, instruction.camera.depthProgress(at: t)) }, caption: caption
                 )
+                return r == 1 ? composed : composed.transformed(by: CGAffineTransform(scaleX: r, y: r))
             }
             if let webcamBuffer {
                 webcamBuffer.withUnsafeBuffer { cameraBuffer in

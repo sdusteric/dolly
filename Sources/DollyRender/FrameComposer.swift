@@ -14,36 +14,47 @@ public struct FrameComposer: Sendable {
     public let recordingPixelScale: Double
     public let captionPosition: CaptionPosition
     public let captionSize: Double
+    /// Pixels per canvas pixel that the pointer, ring and caption bitmaps are drawn with: 2 when the
+    /// preview renders at twice the canvas, so they stay sharp after its scale.
+    public let detail: Double
     let backdrop: CIImage
 
     /// `backdropImage` is the loaded picture when the look's background is one; without it a picture
     /// backdrop draws the default flat color.
     public init(layout: ShapeLayout, look: Look, recordingPixelScale: Double, backdropImage: CIImage? = nil,
-                captionPosition: CaptionPosition = .bottom, captionSize: Double = 15) {
+                captionPosition: CaptionPosition = .bottom, captionSize: Double = 15, detail: Double = 1) {
         self.layout = layout
         self.look = look
         self.recordingPixelScale = recordingPixelScale
         self.captionPosition = captionPosition
         self.captionSize = captionSize
+        self.detail = detail
         let k = min(layout.canvas.width, layout.canvas.height) / 1080
         backdrop = Self.backdrop(look.background, canvas: CGRect(origin: .zero, size: layout.canvas), k: k, picture: backdropImage)
     }
 
     /// The composer for `take` as saved in `folder`: a missing picture falls back to the default
     /// color, and the captions keep their position and size.
-    public static func make(take: Take, folder: URL?, layout: ShapeLayout) -> FrameComposer {
+    public static func make(take: Take, folder: URL?, layout: ShapeLayout, detail: Double = 1) -> FrameComposer {
         let look = folder.map { take.look.resolved(in: $0) } ?? take.look
         var picture: CIImage?
         if case .picture(let file, _) = look.background, let folder {
             picture = CIImage(contentsOf: folder.appending(path: file))
         }
         return FrameComposer(layout: layout, look: look, recordingPixelScale: take.pixelScale, backdropImage: picture,
-                             captionPosition: take.captions?.position ?? .bottom, captionSize: take.captions?.size ?? 15)
+                             captionPosition: take.captions?.position ?? .bottom, captionSize: take.captions?.size ?? 15,
+                             detail: detail)
     }
 
     /// Pixels per point of the 1080 px reference short side.
     var k: Double { min(layout.canvas.width, layout.canvas.height) / 1080 }
     var canvasRect: CGRect { CGRect(origin: .zero, size: layout.canvas) }
+
+    var pointerUnit: Double { k * look.pointerScale * 1.2 * detail }
+    /// A bitmap drawn at `detail` back in canvas pixels; Core Image folds this into the final scale.
+    func toCanvas(_ image: CIImage) -> CIImage {
+        detail == 1 ? image : image.transformed(by: CGAffineTransform(scaleX: 1 / detail, y: 1 / detail))
+    }
 
     func ci(_ r: CGRect) -> CGRect { CGRect(x: r.minX, y: layout.canvas.height - r.maxY, width: r.width, height: r.height) }
 
@@ -93,15 +104,16 @@ public struct FrameComposer: Sendable {
             let p = layout.canvasPoint(recordingPoint)
             return CGPoint(x: (p.x - view.minX) * d, y: layout.canvas.height - (p.y - view.minY) * d)
         }
-        if let ring, look.clickRing, let image = ringImage(progress: ring.progress) {
+        if let ring, look.clickRing, let image = ringImage(progress: ring.progress).map(toCanvas) {
             let c = screen(ring.center)
             out = image.transformed(by: CGAffineTransform(translationX: c.x - image.extent.width / 2,
                                                           y: c.y - image.extent.height / 2)).composited(over: out)
         }
-        if let pointer, let art = PointerArt.image(pointer.shape, unit: k * look.pointerScale * 1.2) {
+        if let pointer, let art = PointerArt.image(pointer.shape, unit: pointerUnit) {
             let c = screen(pointer.point)
-            out = art.image.transformed(by: CGAffineTransform(
-                translationX: c.x - art.tip.x, y: c.y - (art.image.extent.height - art.tip.y)
+            let image = toCanvas(art.image), tip = CGPoint(x: art.tip.x / detail, y: art.tip.y / detail)
+            out = image.transformed(by: CGAffineTransform(
+                translationX: c.x - tip.x, y: c.y - (image.extent.height - tip.y)
             )).composited(over: out)
         }
         let overlay = overlayLayout(camera: cameraState?.track, captionHeight: 0)
@@ -130,8 +142,8 @@ public struct FrameComposer: Sendable {
 
     func captionArt(_ text: String) -> CIImage? {
         let margin = OverlayLayout.marginFraction * look.padding * k
-        return CaptionArt.image(text: text, sizePoints: captionSize, k: k * OverlayLayout.phoneScale,
-                                maxWidth: layout.canvas.width - 2 * max(margin, 16 * k))
+        return CaptionArt.image(text: text, sizePoints: captionSize, k: k * OverlayLayout.phoneScale * detail,
+                                maxWidth: (layout.canvas.width - 2 * max(margin, 16 * k)) * detail).map(toCanvas)
     }
 
     /// The webcam aspect-filled into `rect` (canvas pixels, top-left), mirrored when asked, clipped
@@ -167,7 +179,7 @@ public struct FrameComposer: Sendable {
 
     private func ringImage(progress: Double) -> CIImage? {
         let scale = 0.95 + (1.6 - 0.95) * progress
-        let r = 22 * k * scale, line = 3 * k
+        let r = 22 * k * scale * detail, line = 3 * k * detail
         let side = Int((2 * (r + line)).rounded(.up)) + 2
         guard let ctx = CGContext(data: nil, width: side, height: side, bitsPerComponent: 8, bytesPerRow: 0,
                                   space: CGColorSpace(name: CGColorSpace.sRGB)!,

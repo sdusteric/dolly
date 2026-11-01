@@ -12,7 +12,6 @@ public struct StageView: View {
     let clicks: [Click]
     let aimed: () -> Void
     @State private var showsAimHint: Bool
-    @FocusState private var focused: Bool
 
     public init(editor: EditorModel, image: CGImage?, player: AVPlayer?, isPlaying: Bool, clicks: [Click],
                 showsAimHint: Bool = true, aimed: @escaping () -> Void = {}) {
@@ -67,11 +66,7 @@ public struct StageView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .focusable()
                 .focusEffectDisabled()
-                .focused($focused)
                 .onKeyPress(phases: .down) { key in handle(key) }
-                // The family focus ring: 2 pt ink with a 2 pt gap (spec 10.5).
-                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.ink.color, lineWidth: Theme.Size.focusRing)
-                    .padding(-4).opacity(focused ? 1 : 0))
             }
         }
     }

@@ -22,8 +22,9 @@ public final class EditorScreenModel {
         self.recordShortcut = recordShortcut
     }
 
-    /// Opening Dolly with no takes goes straight to the Record bar: the editor has nothing to show.
-    public var opensToRecord: Bool { entries.isEmpty }
+    /// Opening Dolly (launch, the Dock) goes to the Record bar unless a take is open in this run,
+    /// so a fresh launch never brings back the last recording.
+    public var opensToRecord: Bool { editor == nil }
 
     var rows: [TakeRow] { TakesSidebarModel.rows(entries) }
     var footer: String { TakesSidebarModel.footer(count: entries.count, bytes: totalBytes) }

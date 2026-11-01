@@ -77,14 +77,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         return true
     }
 
-    /// Launch, the Dock and Shelf: the latest take in the editor, or the Record bar when there is none.
+    /// Launch and the Dock: the take open in this run, or the Record bar. Window > Editor and
+    /// Shelf's "open latest" still reach the takes.
     private func openDolly() {
         guard let editor else { return }
         editor.reloadTakes()
         if editor.screen.opensToRecord {
             recording?.openBarIfIdle()
-        } else if editor.editor == nil {
-            editor.openLatest()
         } else {
             editor.showWindow()
         }
@@ -168,7 +167,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
             window.title = "Settings"
             window.isReleasedWhenClosed = false
             window.delegate = self
-            window.contentView = NSHostingView(rootView: SettingsView(model: model))
+            window.contentView = NSHostingView(rootView: SettingsView(model: model).focusEffectDisabled())
         }
         window.setContentSize(window.contentView?.fittingSize ?? CGSize(width: 480, height: 240))
         if settingsWindow == nil { window.center() }

@@ -42,13 +42,14 @@ import Testing
         #expect(TakesSidebarModel.footer(count: 0, bytes: 0) == "Takes will live in ~/Movies/Dolly.")
     }
 
-    @Test @MainActor func openingWithNoTakesGoesToRecord() {
+    @Test @MainActor func openingWithNoTakeOpenGoesToRecord() {
         let screen = EditorScreenModel(entries: [], totalBytes: 0, editor: nil, recordShortcut: "⌃⌥⌘R")
         #expect(screen.opensToRecord)
+        // A fresh launch has takes on disk but none open: still the Record bar, not the last take.
         screen.entries = entries()
-        #expect(!screen.opensToRecord)
-        // A broken take still needs the editor, to show Show in Finder.
-        screen.entries = [.broken(folder: URL(filePath: "/tmp/takes/y", directoryHint: .isDirectory), reason: "Can't open this take")]
+        #expect(screen.opensToRecord)
+        // A take opened in this run comes back from the Dock.
+        screen.editor = EditorModel(take: SyntheticTake.shelfDemo(), pointer: nil)
         #expect(!screen.opensToRecord)
     }
 

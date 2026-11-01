@@ -4,10 +4,11 @@ import Foundation
 
 /// Builds the trimmed composition and Dolly's video composition for a take in one shape. The
 /// player and the exporter both use it; `frameDuration` samples a variable rate master at a steady
-/// rate, holding the last source frame between real ones.
+/// rate, holding the last source frame between real ones. `renderScale` renders more pixels than
+/// the canvas (the editor's preview on a Retina screen); exports use 1.
 public enum PlayerItemFactory {
     public static func composition(
-        take: Take, folder: URL, shape: ShapePreset, fps: Int, pointer: PointerPath?
+        take: Take, folder: URL, shape: ShapePreset, fps: Int, pointer: PointerPath?, renderScale: Double = 1
     ) async throws -> (asset: AVAsset, videoComposition: AVVideoComposition) {
         let source = AVURLAsset(url: folder.appending(path: TakeStore.movieName))
         guard let video = try await source.loadTracks(withMediaType: .video).first else {
@@ -44,13 +45,14 @@ public enum PlayerItemFactory {
                                 pointer: pointer.map { p in { @Sendable t in p.position(at: t) } }, duration: take.duration)
         let instruction = DollyInstruction(
             timeRange: CMTimeRange(start: .zero, duration: range.duration), trackID: track.trackID,
-            composer: FrameComposer.make(take: take, folder: folder, layout: layout),
-            camera: camera, pointer: pointer, recordingOffset: start, webcam: webcam, captions: take.captions
+            composer: FrameComposer.make(take: take, folder: folder, layout: layout, detail: renderScale),
+            camera: camera, pointer: pointer, recordingOffset: start, webcam: webcam, captions: take.captions,
+            renderScale: renderScale
         )
         var configuration = AVVideoComposition.Configuration()
         configuration.customVideoCompositorClass = DollyCompositor.self
         configuration.frameDuration = CMTime(value: 1, timescale: CMTimeScale(fps))
-        configuration.renderSize = layout.canvas
+        configuration.renderSize = CGSize(width: layout.canvas.width * renderScale, height: layout.canvas.height * renderScale)
         configuration.instructions = [instruction]
         configuration.colorPrimaries = AVVideoColorPrimaries_ITU_R_709_2
         configuration.colorTransferFunction = AVVideoTransferFunction_ITU_R_709_2

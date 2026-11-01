@@ -62,6 +62,18 @@ import Testing
         #expect(m.windowID == nil)
     }
 
+    @Test func barFollowsTheWindowTheOwnerBringsForward() {
+        var m = RecordBarModel()
+        let windows = [window(5, "Xcode", pid: 30), window(6, "Safari", pid: 20)]
+        m.prepare(windows: windows, frontmostPID: 30)
+        let switched = m.follow(frontWindow: 6, in: windows)
+        #expect(switched && m.windowID == 6)
+        // Already picked, or a window the bar does not offer (a new one, until the list refreshes): no change.
+        let again = m.follow(frontWindow: 6, in: windows)
+        let unknown = m.follow(frontWindow: 9, in: windows)
+        #expect(!again && !unknown && m.windowID == 6)
+    }
+
     @Test func switchesStartOff() {
         let m = RecordBarModel()
         #expect(!m.camera && !m.microphone && m.cameraID == nil && m.microphoneID == nil)

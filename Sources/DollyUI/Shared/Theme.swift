@@ -97,7 +97,6 @@ nonisolated public enum Theme {
         public static let swatch: CGFloat = 36
         public static let poster = CGSize(width: 56, height: 40)
         public static let windowMinimum = CGSize(width: 1100, height: 720)
-        public static let focusRing: CGFloat = 2
         /// The tape outline on the window the Record bar will record.
         public static let targetStroke: CGFloat = 3
         public static let targetRadius: CGFloat = 12

@@ -14,7 +14,6 @@ public struct TimelineView: View {
     let isPlaying: Bool
     @State private var drag: DragState?
     @State private var ghost: ClosedRange<Double>?
-    @FocusState private var focused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     struct DragState {
@@ -49,10 +48,6 @@ public struct TimelineView: View {
         }
         .focusable()
         .focusEffectDisabled()
-        .focused($focused)
-        // The family focus ring: 2 pt ink with a 2 pt gap (spec 10.5).
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.ink.color, lineWidth: Theme.Size.focusRing)
-            .padding(-4).opacity(focused ? 1 : 0).allowsHitTesting(false))
         .onKeyPress(phases: .down) { key in
             guard let action = TimelineInput.action(key: key.key, shift: key.modifiers.contains(.shift),
                                                     command: key.modifiers.contains(.command)) else { return .ignored }

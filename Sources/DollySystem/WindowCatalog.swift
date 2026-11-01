@@ -22,6 +22,25 @@ public enum WindowCatalog {
         return PickableWindow.frontToBack(pickable, order: stackingOrder())
     }
 
+    /// The window in front of the others, skipping Dolly's own, panels and menus (layer above 0) and
+    /// windows too small to offer. Needs no permission; read about four times a second while the bar is open.
+    public static func frontWindowID() -> UInt32? {
+        let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+        return frontWindowID(in: info, excluding: ProcessInfo.processInfo.processIdentifier)
+    }
+
+    static func frontWindowID(in info: [[String: Any]], excluding own: Int32) -> UInt32? {
+        for window in info {
+            guard (window[kCGWindowLayer as String] as? NSNumber)?.intValue == 0,
+                  let pid = (window[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value, pid != own,
+                  let bounds = window[kCGWindowBounds as String] as? NSDictionary,
+                  let rect = CGRect(dictionaryRepresentation: bounds), rect.width >= 100, rect.height >= 100,
+                  let id = (window[kCGWindowNumber as String] as? NSNumber)?.uint32Value else { continue }
+            return id
+        }
+        return nil
+    }
+
     /// Window numbers front to back. CoreGraphics lists on-screen windows in stacking order;
     /// ScreenCaptureKit does not promise one.
     private static func stackingOrder() -> [UInt32] {

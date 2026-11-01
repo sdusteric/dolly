@@ -84,7 +84,7 @@ public final class TakeCard {
         state.hover = { [weak self] inside in inside ? self?.closeTask?.cancel() : self?.scheduleClose() }
         self.state = state
 
-        let host = FirstMouseHostingView(rootView: TakeCardHost(state: state))
+        let host = FirstMouseHostingView(rootView: TakeCardHost(state: state).focusEffectDisabled())
         let size = host.fittingSize
         let visible = (screen ?? NSScreen.main)?.visibleFrame ?? .zero
         let panel = Self.makePanel()

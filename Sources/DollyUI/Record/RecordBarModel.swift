@@ -56,6 +56,14 @@ nonisolated public struct RecordBarModel: Sendable {
         windowID = (windows.first { $0.pid == frontmostPID } ?? windows.first)?.id
     }
 
+    /// The owner brought another window to the front while the bar is open: pick it, as long as the
+    /// bar offers it. Returns whether the pick changed.
+    public mutating func follow(frontWindow id: UInt32, in windows: [PickableWindow]) -> Bool {
+        guard id != windowID, windows.contains(where: { $0.id == id }) else { return false }
+        windowID = id
+        return true
+    }
+
     public static func label(_ target: TargetKind) -> String {
         switch target {
         case .window: "Window"

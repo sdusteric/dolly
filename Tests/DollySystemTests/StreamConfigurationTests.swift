@@ -21,4 +21,15 @@ import Testing
         let r = PointerSampler.globalFrame(windowListBounds: CGRect(x: 10, y: 50, width: 300, height: 200), mainDisplayHeight: 900)
         #expect(r == CGRect(x: 10, y: 650, width: 300, height: 200))
     }
+
+    @Test func frontWindowSkipsDollyPanelsAndTinyWindows() {
+        func entry(_ id: Int, pid: Int, layer: Int = 0, w: Double = 800) -> [String: Any] {
+            [kCGWindowNumber as String: id, kCGWindowOwnerPID as String: pid, kCGWindowLayer as String: layer,
+             kCGWindowBounds as String: ["X": 0, "Y": 0, "Width": w, "Height": 600]]
+        }
+        // Front to back: the bar (floating, Dolly), the menu bar, a tiny palette, Dolly's editor, then Safari.
+        let info = [entry(1, pid: 7, layer: 3), entry(2, pid: 50, layer: 24), entry(3, pid: 20, w: 40), entry(4, pid: 7), entry(5, pid: 20)]
+        #expect(WindowCatalog.frontWindowID(in: info, excluding: 7) == 5)
+        #expect(WindowCatalog.frontWindowID(in: [], excluding: 7) == nil)
+    }
 }
