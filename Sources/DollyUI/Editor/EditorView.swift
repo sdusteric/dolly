@@ -22,11 +22,12 @@ public struct EditorView: View {
                         recordShortcut: model.recordShortcut, canExport: model.editor != nil,
                         showsWindowControls: showsWindowControls, record: model.onRecord, export: model.onExport)
             HStack(spacing: 0) {
-                TakesSidebar(rows: model.rows, selected: model.editor?.take.id, footer: model.footer,
+                TakesSidebar(rows: model.rows, selected: model.editor?.take.id, footer: model.footer, renaming: $model.renaming,
                              poster: { row in row.takeID.flatMap { model.posters[$0] } },
-                             select: { row in
-                                 if let entry = model.entries.first(where: { $0.folder == row.folder }) { model.onSelect(entry) }
-                             })
+                             select: { row in model.entry(row).map(model.onSelect) },
+                             rename: { row, name in model.entry(row).map { model.onRename($0, name) } },
+                             reveal: { row in model.entry(row).map(model.onReveal) },
+                             trash: { row in model.entry(row).map(model.onTrash) })
                 sheet
                     .padding(.trailing, Theme.Size.sheetInset)
                     .padding(.bottom, Theme.Size.sheetInset)

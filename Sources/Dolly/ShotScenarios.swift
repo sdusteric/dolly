@@ -115,6 +115,7 @@ enum ShotScenarios {
         if scenario.hasPrefix("studio-") { studio(scenario, editor) }
         let model = EditorScreenModel(entries: sidebarEntries(editor.take), totalBytes: 1_900_000_000, editor: editor,
                                       recordShortcut: shortcut)
+        if scenario == "editor-rename" { model.renaming = model.entries.dropFirst().first?.folder }
         if let footage = inputs.footage {
             let image = Image(decorative: footage, scale: 1)
             for entry in model.entries.prefix(2) {

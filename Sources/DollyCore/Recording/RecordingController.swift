@@ -206,7 +206,7 @@ public final class RecordingController {
             let frames = (try? WindowFrameLog.read(folder.appending(path: TakeStore.windowName))) ?? []
             let clicks = ClickDetector.clicks(from: samples, geometry: plan.geometry(windowFrames: frames),
                                               recordingStartHost: result.startHost, stopRequestHost: hostTime)
-            var take = Take(id: id, name: nextName(), created: Date(), target: plan.target, size: plan.size,
+            var take = Take(id: id, name: nextName(hint: plan.nameHint), created: Date(), target: plan.target, size: plan.size,
                             pixelScale: plan.scale, fps: plan.fps, duration: result.duration,
                             recordingStartHost: result.startHost, notes: notes)
             take.recordingRect = plan.globalRect
@@ -238,12 +238,10 @@ public final class RecordingController {
 
     private var isFailed: Bool { if case .failed = state { true } else { false } }
 
-    private func nextName() -> String {
+    private func nextName(hint: String?) -> String {
         let used = Set(store.list().compactMap { entry -> String? in
             if case .ok(let take, _) = entry { take.name } else { nil }
         })
-        var n = 1
-        while used.contains("Untitled take \(n)") { n += 1 }
-        return "Untitled take \(n)"
+        return TakeName.unique(hint, used: used)
     }
 }

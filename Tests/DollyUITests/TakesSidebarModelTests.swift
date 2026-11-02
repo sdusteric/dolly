@@ -31,6 +31,17 @@ import Testing
         #expect(TakesSidebarModel.rows([.ok(take, folder: URL(filePath: "/tmp"))])[0].meta == "0:48 · 1 zoom")
     }
 
+    /// After a take goes to the Trash the editor opens the one below it, or the one above at the end.
+    @Test func trashingOpensTheNeighbor() {
+        let folders = (0..<3).map { URL(filePath: "/tmp/takes/\($0)", directoryHint: .isDirectory) }
+        let entries: [TakeEntry] = folders.map { .ok(Take(name: $0.lastPathComponent, target: .window, size: CGSize(width: 10, height: 10),
+                                                          pixelScale: 1, fps: 60, duration: 1), folder: $0) }
+            + [.broken(folder: URL(filePath: "/tmp/takes/b"), reason: "Can't open this take")]
+        #expect(TakesSidebarModel.neighbor(of: folders[1], in: entries)?.folder == folders[2])
+        #expect(TakesSidebarModel.neighbor(of: folders[2], in: entries)?.folder == folders[1])
+        #expect(TakesSidebarModel.neighbor(of: folders[0], in: Array(entries.prefix(1))) == nil)
+    }
+
     @Test func brokenTakeRow() {
         let rows = TakesSidebarModel.rows(entries())
         #expect(rows.last?.title == "Can't open this take" && rows.last?.isBroken == true)

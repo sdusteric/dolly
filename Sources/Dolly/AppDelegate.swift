@@ -192,6 +192,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
     @objc func newRecording(_ sender: Any?) { recording?.hotkeyPressed() }
     @objc func exportTake(_ sender: Any?) { editor?.showExport() }
     @objc func showInFinder(_ sender: Any?) { editor?.revealTake() }
+    @objc func trashTake(_ sender: Any?) { editor?.trashOpenTake() }
     @objc func showEditor(_ sender: Any?) { editor?.showWindow() }
     @objc func checkForUpdates(_ sender: Any?) { updater?.checkForUpdates() }
 
@@ -214,6 +215,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         case #selector(undoEdit(_:)): return editing ? NSApp.keyWindow?.firstResponder?.undoManager?.canUndo == true : model?.canUndo == true
         case #selector(redoEdit(_:)): return editing ? NSApp.keyWindow?.firstResponder?.undoManager?.canRedo == true : model?.canRedo == true
         case #selector(deleteZoom(_:)): return !editing && model?.selectedZoom != nil
+        case #selector(trashTake(_:)): return !editing && model != nil
         case #selector(checkForUpdates(_:)): return updater != nil
         default: return true
         }
@@ -245,6 +247,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         file.addItem(record)
         file.addItem(item("Export…", #selector(exportTake(_:)), key: "e"))
         file.addItem(item("Show in Finder", #selector(showInFinder(_:))))
+        file.addItem(item("Move to Trash", #selector(trashTake(_:))))
         file.addItem(.separator())
         file.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
 

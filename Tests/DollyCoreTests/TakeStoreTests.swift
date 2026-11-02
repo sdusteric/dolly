@@ -62,6 +62,33 @@ import Testing
         #expect(json.contains("\"version\" : 1"))
     }
 
+    @Test func renameSavesATrimmedNameAndRefusesABlankOne() throws {
+        defer { try? FileManager.default.removeItem(at: home) }
+        let take = SyntheticTake.shelfDemo()
+        let folder = try store.createFolder(for: take.id)
+        try store.save(take)
+        try store.rename(folder, to: "  Haul tiles \n")
+        #expect(try store.load(folder).name == "Haul tiles")
+        try store.rename(folder, to: "   ")
+        #expect(try store.load(folder).name == "Haul tiles")
+    }
+
+    /// Move to Trash hands the folder to the trash (never a hard delete), and only a take folder.
+    @Test func trashMovesOnlyATakeFolder() throws {
+        defer { try? FileManager.default.removeItem(at: home) }
+        let take = SyntheticTake.shelfDemo()
+        let folder = try store.createFolder(for: take.id)
+        try store.save(take)
+        var trashed: [URL] = []
+        try store.moveToTrash(folder) { trashed.append($0) }
+        #expect(trashed == [folder])
+        #expect(throws: TakeStore.NotATakeFolder.self) { try store.moveToTrash(home) { trashed.append($0) } }
+        #expect(throws: TakeStore.NotATakeFolder.self) {
+            try store.moveToTrash(paths.takesFolder.appending(path: "../elsewhere")) { trashed.append($0) }
+        }
+        #expect(trashed == [folder])
+    }
+
     @Test func listIsNewestFirst() throws {
         defer { try? FileManager.default.removeItem(at: home) }
         var older = SyntheticTake.shelfDemo()

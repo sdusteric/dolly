@@ -136,6 +136,18 @@ final class FakePointerSampler: PointerSampling, @unchecked Sendable {
         }
     }
 
+    /// The take is named after what was recorded, with a number when that name is taken.
+    @Test func takeIsNamedFromThePlanHint() async throws {
+        defer { try? FileManager.default.removeItem(at: home) }
+        var named = plan
+        named.nameHint = "Kalos, apple.com"
+        for expected in ["Kalos, apple.com", "Kalos, apple.com 2"] {
+            let c = controller(source: FakeRecordingSource(options: .init(seconds: 1)), pointer: FakePointerSampler())
+            await c.start(plan: named)
+            #expect(try #require(await c.requestStop(hostTime: 1.0)).name == expected)
+        }
+    }
+
     func sideController(camera: FakeSideSource?, microphone: FakeSideSource? = nil) -> RecordingController {
         let c = RecordingController(store: store, source: FakeRecordingSource(options: .init(seconds: 1, startHost: 100)),
                             pointer: FakePointerSampler(), clock: FakeClock(), disk: FakeDiskSpace(bytes: 50_000_000_000),

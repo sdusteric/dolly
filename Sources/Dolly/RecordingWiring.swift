@@ -306,6 +306,7 @@ final class RecordingWiring {
             return onChoiceEnded(false)
         }
         bar.apply(to: &plan)
+        plan.nameHint = TakeName.suggestion(target: target, rect: rect, windowID: windowID, windows: windows)
         showCountdown(over: rect)
         Task {
             await controller.start(plan: plan)

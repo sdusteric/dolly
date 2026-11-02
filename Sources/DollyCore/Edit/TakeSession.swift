@@ -24,6 +24,12 @@ public final class TakeSession {
         return editor
     }
 
+    /// Drops the open take without saving it, for a take that just went to the Trash.
+    public func close() {
+        editor = nil
+        folder = nil
+    }
+
     public func save() throws {
         if let editor { try store.save(editor.take) }
     }

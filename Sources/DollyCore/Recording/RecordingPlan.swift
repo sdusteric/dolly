@@ -26,6 +26,8 @@ public struct RecordingPlan: Sendable, Hashable {
     /// The camera and microphone to record beside the screen; nil when the switch is off.
     public var cameraID: String?
     public var microphoneID: String?
+    /// What the take is named after (TakeName); nil names it "Untitled take N".
+    public var nameHint: String?
 
     public var size: CGSize { globalRect.size }
 

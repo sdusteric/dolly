@@ -30,6 +30,19 @@ import Testing
         #expect(try store.load(folderA).zooms.first?.start == 3)
     }
 
+    /// A take moved to the Trash while open is closed first, so switching away never writes it back.
+    @Test func closingDropsTheOpenTakeWithoutSaving() throws {
+        let (store, folderA, folderB) = try makeStore()
+        let session = TakeSession(store: store)
+        let a = try session.open(folder: folderA)
+        a.renameTake("Edited")
+        try FileManager.default.removeItem(at: folderA)
+        session.close()
+        #expect(session.editor == nil && session.folder == nil)
+        try session.open(folder: folderB)
+        #expect(!FileManager.default.fileExists(atPath: folderA.path(percentEncoded: false)))
+    }
+
     @Test func saveWritesTheOpenTake() throws {
         let (store, folderA, _) = try makeStore()
         let session = TakeSession(store: store)

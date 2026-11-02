@@ -78,6 +78,27 @@ public final class TakeStore: Sendable {
         return sorted + broken.sorted { $0.folder.lastPathComponent < $1.folder.lastPathComponent }
     }
 
+    /// Renames a take that is not open (the open one renames through its editor, for undo).
+    /// A blank name is ignored.
+    public func rename(_ folder: URL, to name: String) throws {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        var take = try load(folder)
+        take.name = trimmed
+        try save(take)
+    }
+
+    public struct NotATakeFolder: Error, Sendable, Hashable {}
+
+    /// Hands a take folder to `trash` (the Finder Trash in the app, so it can be put back). Refuses
+    /// anything that is not a folder directly inside the takes folder. Exports stay where they are.
+    public func moveToTrash(_ folder: URL, trash: (URL) throws -> Void = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) }) throws {
+        let takes = paths.takesFolder.standardizedFileURL.path(percentEncoded: false)
+        let parent = folder.standardizedFileURL.deletingLastPathComponent().path(percentEncoded: false)
+        guard parent.trimmingCharacters(in: ["/"]) == takes.trimmingCharacters(in: ["/"]) else { throw NotATakeFolder() }
+        try trash(folder)
+    }
+
     /// Bytes used by every take folder, for the sidebar footer.
     public func totalBytes() -> Int64 {
         guard let enumerator = FileManager.default.enumerator(

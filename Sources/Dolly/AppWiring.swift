@@ -45,6 +45,9 @@ final class EditorController: NSObject, NSWindowDelegate {
         screen.onRecord = { [weak self] in self?.onRecord() }
         screen.onExport = { [weak self] in self?.showExport() }
         screen.onSelect = { [weak self] entry in self?.open(entry) }
+        screen.onRename = { [weak self] entry, name in self?.rename(entry, to: name) }
+        screen.onReveal = { entry in NSWorkspace.shared.activateFileViewerSelecting([Self.revealURL(entry)]) }
+        screen.onTrash = { [weak self] entry in self?.trash(entry) }
         reloadTakes()
     }
 
@@ -141,6 +144,68 @@ final class EditorController: NSObject, NSWindowDelegate {
         reloadTakes()
         if let first = screen.entries.first(where: { if case .ok = $0 { true } else { false } }) { open(first) }
         showWindow()
+    }
+
+    /// The open take renames through its editor, so Undo can put the name back.
+    private func rename(_ entry: TakeEntry, to name: String) {
+        if isOpen(entry.folder), let editor = screen.editor {
+            editor.renameTake(name)
+            saveNow()
+        } else {
+            do {
+                try store.rename(entry.folder, to: name)
+            } catch {
+                log.error("renaming take \(entry.folder.lastPathComponent) failed: \(error.localizedDescription)")
+            }
+            reloadTakes()
+        }
+        writeShelfStatus()
+    }
+
+    /// Moves the take folder to the Trash, where Finder can put it back. Its exports stay. The open
+    /// take is closed without saving first, then the take below it opens.
+    private func trash(_ entry: TakeEntry) {
+        let folder = entry.folder
+        let wasOpen = isOpen(folder)
+        let next = TakesSidebarModel.neighbor(of: folder, in: screen.entries)
+        if wasOpen {
+            saveTask?.cancel()
+            saveTask = nil
+            preview.pause()
+        }
+        do {
+            try store.moveToTrash(folder)
+        } catch {
+            log.error("moving take \(folder.lastPathComponent) to the Trash failed: \(error.localizedDescription)")
+            NSSound.beep()
+            return
+        }
+        if case .ok(let take, _) = entry { screen.posters[take.id] = nil }
+        if wasOpen {
+            session.close()
+            filmstripTask?.cancel()
+            if let next {
+                open(next)
+            } else {
+                screen.editor = nil
+                preview.unload()
+            }
+        }
+        reloadTakes()
+        writeShelfStatus()
+    }
+
+    /// File > Move to Trash: the open take.
+    func trashOpenTake() {
+        if let folder, let entry = screen.entries.first(where: { isOpen($0.folder) && $0.folder == folder }) { trash(entry) }
+    }
+
+    private func isOpen(_ folder: URL) -> Bool {
+        session.folder?.standardizedFileURL == folder.standardizedFileURL
+    }
+
+    private static func revealURL(_ entry: TakeEntry) -> URL {
+        if case .ok(_, let folder) = entry { folder.appending(path: TakeStore.movieName) } else { entry.folder }
     }
 
     /// A new take from the recorder: give it the saved look and a poster, load it, then hand it to
@@ -487,6 +552,19 @@ final class PreviewPlayer: PlaybackControlling {
         movie = folder.appending(path: TakeStore.movieName)
         rebuild(after: .zero)
         watchPlayhead(editor)
+    }
+
+    /// The open take went to the Trash and no other take is left to show.
+    func unload() {
+        pause()
+        rebuildTask?.cancel()
+        frameTask?.cancel()
+        player?.replaceCurrentItem(with: nil)
+        editor = nil
+        folder = nil
+        movie = nil
+        aimImage = nil
+        recordingFrame = nil
     }
 
     func takeChanged() {
