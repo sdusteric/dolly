@@ -188,3 +188,33 @@ import Testing
         #expect(!m.canUndo)
     }
 }
+
+/// Names read from the screen after the take opened.
+@MainActor @Suite struct ZoomNameFillTests {
+    func take() -> Take {
+        var take = Take(name: "T", target: .window, size: CGSize(width: 800, height: 600), pixelScale: 2, fps: 60, duration: 10)
+        take.zooms = [0, 4].map { s in
+            Zoom(start: s, end: s + 3, aim: CGPoint(x: 100, y: 100), depth: 2, mode: .hold, moveIn: 0.6, moveOut: 0.5,
+                 source: .auto, clickIDs: [0], name: "Click at 0:0\(Int(s))")
+        }
+        return take
+    }
+
+    @Test func namesFillOnlyZoomsStillNamedThePlaceholder() {
+        var t = take()
+        t.zooms[1].name = "Mine"
+        let updates = t.zooms.map { ZoomNameUpdate(id: $0.id, from: "Click at 0:0\(Int($0.start))", to: "Read") }
+        let first = t.apply(updates)
+        #expect(first && t.zooms.map(\.name) == ["Read", "Mine"])
+        let again = t.apply(updates)
+        #expect(!again)
+    }
+
+    @Test func editorTakesNamesWithoutAnUndoStep() {
+        let t = take()
+        let editor = EditorModel(take: t, pointer: nil)
+        editor.apply([ZoomNameUpdate(id: t.zooms[0].id, from: t.zooms[0].name, to: "Run check up")])
+        #expect(editor.take.zooms[0].name == "Run check up")
+        #expect(!editor.canUndo)
+    }
+}

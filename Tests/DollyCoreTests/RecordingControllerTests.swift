@@ -27,6 +27,29 @@ final class FakePointerSampler: PointerSampling, @unchecked Sendable {
     }
 }
 
+/// Answers only once the test opens it, like Vision loading its models.
+final class GatedNamer: ZoomNaming, @unchecked Sendable {
+    private let lock = NSLock()
+    private var answer: String?
+    private var waiting: [CheckedContinuation<String, Never>] = []
+
+    func name(for click: Click, movie: URL, take: Take) async -> String {
+        await withCheckedContinuation { continuation in
+            lock.lock()
+            if let answer { lock.unlock(); continuation.resume(returning: answer) } else { waiting.append(continuation); lock.unlock() }
+        }
+    }
+
+    func open(_ name: String) {
+        lock.lock()
+        answer = name
+        let pending = waiting
+        waiting = []
+        lock.unlock()
+        pending.forEach { $0.resume(returning: name) }
+    }
+}
+
 @MainActor @Suite struct RecordingControllerTests {
     let home = tempURL("home")
     var store: TakeStore { TakeStore(paths: DollyPaths(environment: ["DOLLY_HOME": home.path])) }
@@ -146,6 +169,28 @@ final class FakePointerSampler: PointerSampling, @unchecked Sendable {
             await c.start(plan: named)
             #expect(try #require(await c.requestStop(hostTime: 1.0)).name == expected)
         }
+    }
+
+    /// Reading the screen for zoom names can take many seconds (Vision loads its models on first
+    /// use), so the take is saved and handed over first, with the placeholder names.
+    @Test func takeIsSavedWithoutWaitingForZoomNames() async throws {
+        defer { try? FileManager.default.removeItem(at: home) }
+        let pointer = FakePointerSampler()
+        pointer.samples = makeLog(presses: [(2.4, 2.49, 500, 500)], until: 4)
+        let namer = GatedNamer()
+        let c = RecordingController(store: store, source: FakeRecordingSource(options: .init(seconds: 4)), pointer: pointer,
+                                    clock: FakeClock(), disk: FakeDiskSpace(bytes: 50_000_000_000), rules: ZoomRules(), namer: namer)
+        var updates: [ZoomNameUpdate] = []
+        c.onZoomNames = { _, names in updates = names }
+        await c.start(plan: plan)
+        let take = try #require(await c.requestStop(hostTime: 4.0))
+        let zoom = try #require(take.zooms.first)
+        #expect(zoom.name.hasPrefix("Click at"))
+        #expect(try store.load(store.folder(for: take.id)).zooms.first?.name == zoom.name)
+        #expect(c.state == .idle && updates.isEmpty)
+        namer.open("Run check up")
+        for _ in 0..<200 where updates.isEmpty { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(updates == [ZoomNameUpdate(id: zoom.id, from: zoom.name, to: "Run check up")])
     }
 
     func sideController(camera: FakeSideSource?, microphone: FakeSideSource? = nil) -> RecordingController {

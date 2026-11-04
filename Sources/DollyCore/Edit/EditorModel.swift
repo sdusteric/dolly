@@ -335,6 +335,12 @@ public final class EditorModel {
         change { $0.name = trimmed }
     }
 
+    /// Zoom names read from the screen after the take opened. Not an edit, so it is not undoable.
+    public func apply(_ updates: [ZoomNameUpdate]) {
+        var updated = take
+        if updated.apply(updates) { take = updated }
+    }
+
     /// Notes a finished export on the take. Not an edit, so it is not undoable.
     public func recordExport(_ record: ExportRecord) { take.exports.append(record) }
 

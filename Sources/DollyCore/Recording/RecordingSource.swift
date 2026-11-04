@@ -63,6 +63,33 @@ public protocol ZoomNaming: Sendable {
     func name(for click: Click, movie: URL, take: Take) async -> String
 }
 
+/// A zoom name read from the screen after the take was saved: `to` replaces the zoom's name only
+/// while it is still `from`, so a name the owner typed in the meantime stays.
+public struct ZoomNameUpdate: Sendable, Hashable {
+    public var id: Zoom.ID
+    public var from: String
+    public var to: String
+    public init(id: Zoom.ID, from: String, to: String) {
+        self.id = id
+        self.from = from
+        self.to = to
+    }
+}
+
+public extension Take {
+    /// Returns whether any name changed.
+    @discardableResult
+    mutating func apply(_ updates: [ZoomNameUpdate]) -> Bool {
+        var changed = false
+        for update in updates {
+            guard let i = zooms.firstIndex(where: { $0.id == update.id }), zooms[i].name == update.from, update.from != update.to else { continue }
+            zooms[i].name = update.to
+            changed = true
+        }
+        return changed
+    }
+}
+
 public struct FallbackZoomNamer: ZoomNaming {
     public init() {}
     public func name(for click: Click, movie: URL, take: Take) async -> String { "Click at \(TimeText.clock(click.t))" }

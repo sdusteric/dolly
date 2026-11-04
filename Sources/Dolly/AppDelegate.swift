@@ -32,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         let recording = RecordingWiring(paths: paths, settings: settings)
         editor.onRecord = { [weak recording] in recording?.hotkeyPressed() }
         recording.onTake = { [weak editor] take in editor?.received(take) }
+        recording.onZoomNames = { [weak editor] id, updates in editor?.applyZoomNames(updates, to: id) }
         recording.onChoosing = { [weak editor] in editor?.stepAside() }
         recording.onChoiceEnded = { [weak editor] started in
             if started { editor?.recordingStarted() } else { editor?.recordingCancelled() }

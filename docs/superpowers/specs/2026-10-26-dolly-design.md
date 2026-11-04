@@ -98,7 +98,7 @@ Log format: `pointer.bin`, little-endian records of `(t: Float64 host seconds, x
 
 ### 4.6 Naming a zoom without Accessibility **(my call)**
 
-Reading the element under a click would need Accessibility, so Dolly reads the pixels instead: after recording, Vision text recognition (`VNRecognizeTextRequest`, on device) runs on the frame at each click, in a 300 × 120 pt box around the click point, and the text line nearest the click becomes the zoom's name ("Run check up"). No text found: "Click at 0:07.9". The owner can rename any zoom in the inspector. Names are labels only; nothing depends on them.
+Reading the element under a click would need Accessibility, so Dolly reads the pixels instead: after recording, Vision text recognition (`VNRecognizeTextRequest`, on device) runs on the frame at each click, in a 300 × 120 pt box around the click point, and the text line nearest the click becomes the zoom's name ("Run check up"). No text found: "Click at 0:07.9". The take never waits for this: it is saved and opened with the "Click at" names, and the read names fill in when Vision is done (it can take 10 s or more the first time it runs), only on zooms the owner has not renamed meanwhile, and not as an undo step. The owner can rename any zoom in the inspector. Names are labels only; nothing depends on them.
 
 ### 4.7 Drawing the pointer
 

@@ -11,6 +11,10 @@ import SwiftUI
 final class RecordingWiring {
     private(set) var controller: RecordingController
     var onTake: (Take) -> Void = { _ in }
+    /// Zoom names read from the screen, which arrive after the take was handed over.
+    var onZoomNames: (UUID, [ZoomNameUpdate]) -> Void = { _, _ in } {
+        didSet { forwardZoomNames() }
+    }
     /// The Camera and Microphone switches changed; the app remembers them in the settings.
     var onDevices: (RecordBarModel) -> Void = { _ in }
     /// The bar opened, and later closed with a recording started (true) or not (false).
@@ -47,6 +51,7 @@ final class RecordingWiring {
         self.paths = paths
         self.settings = settings
         shortcut = settings.hotkey.displayString
+        // onZoomNames is set once init is done; its didSet hooks it to this controller.
         controller = Self.makeController(paths: paths, settings: settings)
         builtAdvanced = settings.advanced
         sleepObserver = NSWorkspace.shared.notificationCenter.addObserver(
@@ -54,6 +59,10 @@ final class RecordingWiring {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.stopNow(reason: .sleep) }
         }
+    }
+
+    private func forwardZoomNames() {
+        controller.onZoomNames = { [weak self] id, updates in self?.onZoomNames(id, updates) }
     }
 
     private static func makeController(paths: DollyPaths, settings: DollyCore.Settings) -> RecordingController {
@@ -77,6 +86,7 @@ final class RecordingWiring {
         switch controller.state {
         case .idle, .failed:
             controller = Self.makeController(paths: paths, settings: settings)
+            forwardZoomNames()
             builtAdvanced = settings.advanced
         default: break
         }

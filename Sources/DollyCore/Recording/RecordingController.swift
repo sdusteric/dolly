@@ -42,6 +42,8 @@ public final class RecordingController {
     @ObservationIgnored private var sideFailures: [Side: Double] = [:]
     @ObservationIgnored private var sideNotes: [String] = []
     @ObservationIgnored private var sideStartTask: Task<Void, Never>?
+    /// Zoom names read from the screen, for the take with this id; arrives after the take is saved.
+    @ObservationIgnored public var onZoomNames: (UUID, [ZoomNameUpdate]) -> Void = { _, _ in }
 
     public init(store: TakeStore, source: any RecordingSource, pointer: any PointerSampling, clock: any DollyClock,
                 disk: any DiskSpaceProbing, rules: ZoomRules, namer: any ZoomNaming = FallbackZoomNamer(),
@@ -217,15 +219,10 @@ public final class RecordingController {
                 take.microphoneOffset = first - result.startHost
             }
             take.zooms = rules.zooms(for: clicks, size: plan.size, target: plan.target, trim: take.trim)
-            let movie = folder.appending(path: TakeStore.movieName)
-            for (i, zoom) in take.zooms.enumerated() {
-                if let first = zoom.clickIDs.first, let click = clicks.first(where: { $0.id == first }) {
-                    take.zooms[i].name = await namer.name(for: click, movie: movie, take: take)
-                }
-            }
             try store.save(take)
             lastTake = take
             state = .idle
+            nameZooms(take, clicks: clicks, movie: folder.appending(path: TakeStore.movieName))
             return take
         } catch {
             state = .failed(Self.stopFailedMessage)
@@ -237,6 +234,23 @@ public final class RecordingController {
     public var recordingFolder: URL? { takeID.map(store.folder(for:)) }
 
     private var isFailed: Bool { if case .failed = state { true } else { false } }
+
+    /// Reads each zoom's name from the screen after the take is saved. Vision can take many
+    /// seconds the first time it runs, and the take must never wait on a label.
+    private func nameZooms(_ take: Take, clicks: [Click], movie: URL) {
+        let pending = take.zooms.compactMap { zoom in
+            zoom.clickIDs.first.flatMap { id in clicks.first { $0.id == id } }.map { (zoom, $0) }
+        }
+        guard !pending.isEmpty else { return }
+        let namer = namer, report = onZoomNames
+        Task {
+            var updates: [ZoomNameUpdate] = []
+            for (zoom, click) in pending {
+                updates.append(ZoomNameUpdate(id: zoom.id, from: zoom.name, to: await namer.name(for: click, movie: movie, take: take)))
+            }
+            report(take.id, updates)
+        }
+    }
 
     private func nextName(hint: String?) -> String {
         let used = Set(store.list().compactMap { entry -> String? in

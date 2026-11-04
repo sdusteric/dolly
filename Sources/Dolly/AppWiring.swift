@@ -266,6 +266,21 @@ final class EditorController: NSObject, NSWindowDelegate {
         }
     }
 
+    /// Zoom names read from the screen after the take was saved: into the open editor when it shows
+    /// that take, otherwise into its take.json. A take moved to the Trash meanwhile is left alone.
+    func applyZoomNames(_ updates: [ZoomNameUpdate], to id: UUID) {
+        if let editor = screen.editor, editor.take.id == id { return editor.apply(updates) }
+        let folder = store.folder(for: id)
+        do {
+            var take = try store.load(folder)
+            guard take.apply(updates) else { return }
+            try store.save(take)
+            refreshTakes()
+        } catch {
+            log.warning("zoom names for \(id.uuidString) were not saved: \(error.localizedDescription)")
+        }
+    }
+
     /// From the corner card: the take it shows, in the editor, optionally straight into Export.
     func showTake(_ id: UUID, export: Bool) {
         let folder = store.folder(for: id)
