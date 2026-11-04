@@ -7,9 +7,26 @@ import Foundation
 /// rate, holding the last source frame between real ones. `renderScale` renders more pixels than
 /// the canvas (the editor's preview on a Retina screen); exports use 1.
 public enum PlayerItemFactory {
+    /// The trimmed recording with its sound and webcam tracks, and what it was built from. The
+    /// composition is never changed after `asset(take:folder:)` returns it, so it can cross actors.
+    public struct TakeAsset: @unchecked Sendable {
+        public let asset: AVAsset
+        public let inputs: CompositionInputs
+        let trackID: CMPersistentTrackID
+        let webcamID: CMPersistentTrackID?
+        let start: Double
+        let duration: CMTime
+    }
+
     public static func composition(
         take: Take, folder: URL, shape: ShapePreset, fps: Int, pointer: PointerPath?, renderScale: Double = 1
     ) async throws -> (asset: AVAsset, videoComposition: AVVideoComposition) {
+        let built = try await asset(take: take, folder: folder)
+        return (built.asset, await videoComposition(take: take, folder: folder, asset: built, shape: shape, fps: fps, pointer: pointer,
+                                              renderScale: renderScale))
+    }
+
+    public static func asset(take: Take, folder: URL) async throws -> TakeAsset {
         let source = AVURLAsset(url: folder.appending(path: TakeStore.movieName))
         guard let video = try await source.loadTracks(withMediaType: .video).first else {
             throw CocoaError(.fileReadCorruptFile)
@@ -33,20 +50,30 @@ public enum PlayerItemFactory {
                   let audioTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) {
             try audioTrack.insertTimeRange(range, of: audio, at: .zero)
         }
-        var webcam: (trackID: CMPersistentTrackID, track: CameraTrack)?
-        if let camera = take.camera,
-           let id = try await insertSide(folder.appending(path: camera.file), type: .video, offset: camera.startOffset,
-                                         trim: start...end, limit: range.duration, into: composition) {
-            webcam = (id, camera)
+        var webcamID: CMPersistentTrackID?
+        if let camera = take.camera {
+            webcamID = try await insertSide(folder.appending(path: camera.file), type: .video, offset: camera.startOffset,
+                                            trim: start...end, limit: range.duration, into: composition)
         }
+        return TakeAsset(asset: composition, inputs: take.compositionInputs, trackID: track.trackID, webcamID: webcamID,
+                         start: start, duration: range.duration)
+    }
 
+    /// Dolly's compositor over `asset` for the take as it is now. Much cheaper than the asset, so the
+    /// preview builds a new one for a look or zoom edit and keeps the asset. Off the caller's actor,
+    /// since a picture backdrop is read from disk.
+    @concurrent public static func videoComposition(
+        take: Take, folder: URL, asset: TakeAsset, shape: ShapePreset, fps: Int, pointer: PointerPath?, renderScale: Double = 1
+    ) async -> AVVideoComposition {
         let layout = ShapeLayout(shape: shape, recordingSize: take.size, padding: take.look.padding)
         let camera = CameraPath(zooms: take.zooms, layout: layout,
                                 pointer: pointer.map { p in { @Sendable t in p.position(at: t) } }, duration: take.duration)
+        var webcam: (trackID: CMPersistentTrackID, track: CameraTrack)?
+        if let id = asset.webcamID, let track = take.camera { webcam = (id, track) }
         let instruction = DollyInstruction(
-            timeRange: CMTimeRange(start: .zero, duration: range.duration), trackID: track.trackID,
+            timeRange: CMTimeRange(start: .zero, duration: asset.duration), trackID: asset.trackID,
             composer: FrameComposer.make(take: take, folder: folder, layout: layout, detail: renderScale),
-            camera: camera, pointer: pointer, recordingOffset: start, webcam: webcam, captions: take.captions,
+            camera: camera, pointer: pointer, recordingOffset: asset.start, webcam: webcam, captions: take.captions,
             renderScale: renderScale
         )
         var configuration = AVVideoComposition.Configuration()
@@ -57,7 +84,7 @@ public enum PlayerItemFactory {
         configuration.colorPrimaries = AVVideoColorPrimaries_ITU_R_709_2
         configuration.colorTransferFunction = AVVideoTransferFunction_ITU_R_709_2
         configuration.colorYCbCrMatrix = AVVideoYCbCrMatrix_ITU_R_709_2
-        return (composition, AVVideoComposition(configuration: configuration))
+        return AVVideoComposition(configuration: configuration)
     }
 
     /// Puts the part of a side file (the webcam or the microphone) that falls inside the trim into

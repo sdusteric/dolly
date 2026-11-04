@@ -81,7 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
     /// Shelf's "open latest" still reach the takes.
     private func openDolly() {
         guard let editor else { return }
-        editor.reloadTakes()
+        editor.refreshTakes()
         if editor.screen.opensToRecord {
             recording?.openBarIfIdle()
         } else {

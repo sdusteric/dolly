@@ -42,6 +42,23 @@ import Testing
         #expect(TakesSidebarModel.neighbor(of: folders[0], in: Array(entries.prefix(1))) == nil)
     }
 
+    /// A save changes only the open take, so the sidebar swaps that one entry and keeps the order.
+    @Test func savingSwapsOnlyTheOpenTake() {
+        let folders = (0..<3).map { URL(filePath: "/tmp/takes/\($0)", directoryHint: .isDirectory) }
+        let takes = folders.map { Take(name: $0.lastPathComponent, target: .window, size: CGSize(width: 10, height: 10),
+                                       pixelScale: 1, fps: 60, duration: 1) }
+        let entries: [TakeEntry] = zip(takes, folders).map { .ok($0, folder: $1) }
+            + [.broken(folder: URL(filePath: "/tmp/takes/b"), reason: "Can't open this take")]
+        var saved = takes[1]
+        saved.name = "Renamed"
+        let patched = TakesSidebarModel.replacing(saved, at: URL(filePath: "/tmp/takes/1/", directoryHint: .isDirectory), in: entries)
+        #expect(patched?.count == 4)
+        #expect(patched?[1] == .ok(saved, folder: folders[1]))
+        #expect(patched?[0] == entries[0] && patched?[2] == entries[2] && patched?[3] == entries[3])
+        // A take the list does not have yet needs a full reload.
+        #expect(TakesSidebarModel.replacing(saved, at: URL(filePath: "/tmp/takes/new"), in: entries) == nil)
+    }
+
     @Test func brokenTakeRow() {
         let rows = TakesSidebarModel.rows(entries())
         #expect(rows.last?.title == "Can't open this take" && rows.last?.isBroken == true)

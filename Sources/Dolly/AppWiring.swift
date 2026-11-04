@@ -28,6 +28,8 @@ final class EditorController: NSObject, NSWindowDelegate {
     private let filmstrip = Filmstrip()
     private var filmstripTask: Task<Void, Never>?
     private var saveTask: Task<Void, Never>?
+    private var reloadNumber = 0
+    private var shelfNumber = 0
 
     init(paths: DollyPaths, settings: DollyCore.Settings, log: Log) {
         self.paths = paths
@@ -48,7 +50,7 @@ final class EditorController: NSObject, NSWindowDelegate {
         screen.onRename = { [weak self] entry, name in self?.rename(entry, to: name) }
         screen.onReveal = { entry in NSWorkspace.shared.activateFileViewerSelecting([Self.revealURL(entry)]) }
         screen.onTrash = { [weak self] entry in self?.trash(entry) }
-        reloadTakes()
+        refreshTakes()
     }
 
     var editor: EditorModel? { screen.editor }
@@ -122,15 +124,37 @@ final class EditorController: NSObject, NSWindowDelegate {
     /// The take being recorded has no take.json yet; it is left out until it is saved.
     var recordingFolder: () -> URL? = { nil }
 
-    func reloadTakes() {
+    /// Reads every take.json and walks the takes folder off the main actor; the newest call wins.
+    /// The open take shows its edits as they are in memory, which may be newer than its file.
+    func reloadTakes() async {
+        reloadNumber += 1
+        let number = reloadNumber
+        let store = store
+        let (entries, bytes) = await Task.detached { (store.list(), store.totalBytes()) }.value
+        guard number == reloadNumber else { return }
         let recording = recordingFolder()?.standardizedFileURL
-        screen.entries = store.list().filter { $0.folder.standardizedFileURL != recording }
-        screen.totalBytes = store.totalBytes()
+        var shown = entries.filter { $0.folder.standardizedFileURL != recording }
+        if let editor = screen.editor, let folder, let patched = TakesSidebarModel.replacing(editor.take, at: folder, in: shown) {
+            shown = patched
+        }
+        screen.entries = shown
+        screen.totalBytes = bytes
         for case .ok(let take, let folder) in screen.entries where screen.posters[take.id] == nil {
             if let image = NSImage(contentsOf: folder.appending(path: TakeStore.posterName)) {
                 screen.posters[take.id] = Image(nsImage: image)
             }
         }
+    }
+
+    func refreshTakes() {
+        Task { await reloadTakes() }
+    }
+
+    /// After a save only the open take changed, so its sidebar entry is swapped in place.
+    private func refreshOpenEntry() {
+        guard let editor = screen.editor, let folder else { return }
+        guard let patched = TakesSidebarModel.replacing(editor.take, at: folder, in: screen.entries) else { return refreshTakes() }
+        if patched != screen.entries { screen.entries = patched }
     }
 
     func open(_ entry: TakeEntry) {
@@ -141,9 +165,11 @@ final class EditorController: NSObject, NSWindowDelegate {
     }
 
     func openLatest() {
-        reloadTakes()
-        if let first = screen.entries.first(where: { if case .ok = $0 { true } else { false } }) { open(first) }
-        showWindow()
+        Task {
+            await reloadTakes()
+            if let first = screen.entries.first(where: { if case .ok = $0 { true } else { false } }) { open(first) }
+            showWindow()
+        }
     }
 
     /// The open take renames through its editor, so Undo can put the name back.
@@ -152,12 +178,15 @@ final class EditorController: NSObject, NSWindowDelegate {
             editor.renameTake(name)
             saveNow()
         } else {
+            // One take.json is read back here, so the row shows the new name without a full reload.
             do {
                 try store.rename(entry.folder, to: name)
+                let take = try store.load(entry.folder)
+                if let patched = TakesSidebarModel.replacing(take, at: entry.folder, in: screen.entries) { screen.entries = patched }
             } catch {
                 log.error("renaming take \(entry.folder.lastPathComponent) failed: \(error.localizedDescription)")
+                refreshTakes()
             }
-            reloadTakes()
         }
         writeShelfStatus()
     }
@@ -181,6 +210,7 @@ final class EditorController: NSObject, NSWindowDelegate {
             return
         }
         if case .ok(let take, _) = entry { screen.posters[take.id] = nil }
+        screen.entries.removeAll { $0.folder.standardizedFileURL == folder.standardizedFileURL }
         if wasOpen {
             session.close()
             filmstripTask?.cancel()
@@ -191,7 +221,7 @@ final class EditorController: NSObject, NSWindowDelegate {
                 preview.unload()
             }
         }
-        reloadTakes()
+        refreshTakes()
         writeShelfStatus()
     }
 
@@ -230,7 +260,7 @@ final class EditorController: NSObject, NSWindowDelegate {
         if take.microphoneOffset != nil, take.captions == nil { studio.transcribe(take, folder: folder) }
         Task {
             await makePoster(take, folder: folder)
-            reloadTakes()
+            await reloadTakes()
             open(folder: folder)
             onReceived(take, NSImage(contentsOf: folder.appending(path: TakeStore.posterName)))
         }
@@ -254,7 +284,7 @@ final class EditorController: NSObject, NSWindowDelegate {
             editor = try session.open(folder: folder)
         } catch {
             log.error("opening take \(folder.lastPathComponent) failed: \(error.localizedDescription)")
-            reloadTakes()
+            refreshTakes()
             return
         }
         loadFilmstrip(editor.take, folder: folder)
@@ -330,7 +360,7 @@ final class EditorController: NSObject, NSWindowDelegate {
         }
     }
 
-    /// Saves the open take and refreshes the sidebar, so its names and "exported" stay current.
+    /// Saves the open take and refreshes its sidebar entry, so its name and "exported" stay current.
     func saveNow() {
         saveTask?.cancel()
         saveTask = nil
@@ -339,7 +369,7 @@ final class EditorController: NSObject, NSWindowDelegate {
         } catch {
             log.error("saving take failed: \(error.localizedDescription)")
         }
-        reloadTakes()
+        refreshOpenEntry()
     }
 
     private func save(_ take: Take) {
@@ -478,24 +508,35 @@ final class EditorController: NSObject, NSWindowDelegate {
 
     /// The newest exported take, or none. Called after every export and once at launch, so the
     /// poster is removed when "Show in Shelf" is off.
+    /// Reads every take off the main actor; a newer call wins over one still reading.
     func writeShelfStatus() {
+        shelfNumber += 1
+        let number = shelfNumber
+        let store = store, showInShelf = settings.showInShelf
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
+        let writer = ShelfStatusWriter(directory: paths.shelfStatusFolder, appVersion: version)
+        Task {
+            let newest = await Task.detached { Self.newestExport(in: store.list()) }.value
+            guard number == shelfNumber else { return }
+            let latest = newest.map { item in
+                ShelfLatest(title: item.take.name, lengthSeconds: item.take.trim.upperBound - item.take.trim.lowerBound,
+                            exportedShapes: Array(Set(item.take.exports.map(\.shape.label))).sorted(), exportedAt: item.date)
+            }
+            do {
+                try writer.write(latest: latest, poster: newest?.folder.appending(path: TakeStore.posterName), showInShelf: showInShelf)
+            } catch {
+                log.warning("Shelf status write failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    nonisolated private static func newestExport(in entries: [TakeEntry]) -> (take: Take, folder: URL, date: Date)? {
         var newest: (take: Take, folder: URL, date: Date)?
-        for case .ok(let take, let folder) in store.list() {
+        for case .ok(let take, let folder) in entries {
             guard let date = take.exports.map(\.date).max() else { continue }
             if date > newest?.date ?? .distantPast { newest = (take, folder, date) }
         }
-        let latest = newest.map { item in
-            ShelfLatest(title: item.take.name, lengthSeconds: item.take.trim.upperBound - item.take.trim.lowerBound,
-                        exportedShapes: Array(Set(item.take.exports.map(\.shape.label))).sorted(), exportedAt: item.date)
-        }
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
-        let writer = ShelfStatusWriter(directory: paths.shelfStatusFolder, appVersion: version)
-        do {
-            try writer.write(latest: latest, poster: newest?.folder.appending(path: TakeStore.posterName),
-                             showInShelf: settings.showInShelf)
-        } catch {
-            log.warning("Shelf status write failed: \(error.localizedDescription)")
-        }
+        return newest
     }
 }
 
@@ -513,7 +554,8 @@ private struct LiveWorkspace: View {
             editor: editor,
             stage: AnyView(StageView(editor: editor, image: preview.aimImage, player: preview.player,
                                      isPlaying: preview.isPlaying, clicks: clicks,
-                                     showsAimHint: !actions.aimHintSeen, aimed: actions.aimed)),
+                                     showsAimHint: !actions.aimHintSeen, aimed: actions.aimed,
+                                     resized: { preview.stageResized($0) })),
             inspector: AnyView(StudioInspector(editor: editor, clicks: clicks, actions: actions,
                                                transcription: studio.status(editor.take.id))),
             timeline: AnyView(TimelineView(editor: editor, clickTimes: clicks.map(\.t), filmstrip: filmstrip,
@@ -540,18 +582,68 @@ final class PreviewPlayer: PlaybackControlling {
     @ObservationIgnored private var endObserver: NSObjectProtocol?
     @ObservationIgnored private var rebuildTask: Task<Void, Never>?
     @ObservationIgnored private var frameTask: Task<Void, Never>?
+    /// The player item's asset; kept while an edit leaves its inputs alone.
+    @ObservationIgnored private var takeAsset: PlayerItemFactory.TakeAsset?
     /// Composition time 0 is the trim start.
     @ObservationIgnored private var offset = 0.0
     @ObservationIgnored private var lastSeek = -1.0
+    /// The stage's size in points, from StageView; the Aim still is drawn at about this size.
+    @ObservationIgnored private var stagePoints = CGSize.zero
+    @ObservationIgnored private var frameNumber = 0
+    @ObservationIgnored private var aimRequested: AimKey?
+    @ObservationIgnored private var aimRenderer: LatestOnly<AimRequest, AimResult>?
+
+    private struct AimKey: Equatable {
+        let inputs: AimInputs
+        let frame: Int
+        let scale: Double
+    }
+
+    private struct AimRequest: Sendable {
+        let take: Take
+        let folder: URL?
+        let recording: CGImage
+        let scale: Double
+    }
+
+    private struct AimResult: Sendable {
+        let image: CGImage?
+        let takeID: UUID
+    }
+
+    init() {
+        aimRenderer = LatestOnly(work: { request in
+            AimResult(image: StillRenderer.render(take: request.take, folder: request.folder, recording: request.recording,
+                                                  camera: nil, pointer: nil, ring: nil, scale: request.scale),
+                      takeID: request.take.id)
+        }, deliver: { [weak self] result in
+            // A still from the take that was open before never replaces this one's.
+            guard let self, let image = result.image, self.editor?.take.id == result.takeID else { return }
+            self.aimImage = image
+        })
+    }
 
     func load(editor: EditorModel, folder: URL) {
         self.editor = editor
         self.folder = folder
-        aimImage = nil
-        recordingFrame = nil
+        resetAim()
+        takeAsset = nil
         movie = folder.appending(path: TakeStore.movieName)
         rebuild(after: .zero)
         watchPlayhead(editor)
+    }
+
+    /// From StageView. A bigger stage draws the Aim still again, a smaller one keeps it.
+    func stageResized(_ size: CGSize) {
+        stagePoints = size
+        if editor?.selectedZoom != nil { renderAim() }
+    }
+
+    private func resetAim() {
+        aimRenderer?.cancel()
+        aimRequested = nil
+        aimImage = nil
+        recordingFrame = nil
     }
 
     /// The open take went to the Trash and no other take is left to show.
@@ -563,8 +655,8 @@ final class PreviewPlayer: PlaybackControlling {
         editor = nil
         folder = nil
         movie = nil
-        aimImage = nil
-        recordingFrame = nil
+        takeAsset = nil
+        resetAim()
     }
 
     func takeChanged() {
@@ -609,18 +701,32 @@ final class PreviewPlayer: PlaybackControlling {
             if delay > .zero { try? await Task.sleep(for: delay) }
             guard !Task.isCancelled, let self, let editor, let folder else { return }
             let take = editor.take
+            // Twice the canvas on a Retina screen: the stage is wider than 1080p there, and a zoom
+            // would otherwise show a stretched frame instead of the recording's own pixels.
+            let scale = min(NSScreen.main?.backingScaleFactor ?? 1, 2)
             do {
-                // Twice the canvas on a Retina screen: the stage is wider than 1080p there, and a zoom
-                // would otherwise show a stretched frame instead of the recording's own pixels.
-                let scale = min(NSScreen.main?.backingScaleFactor ?? 1, 2)
-                let built = try await PlayerItemFactory.composition(take: take, folder: folder, shape: take.currentShape, fps: 60,
-                                                                    pointer: editor.pointer, renderScale: scale)
+                // Look and zoom edits keep the asset and the item; only the compositor's instruction changes.
+                if let kept = takeAsset, kept.inputs == take.compositionInputs, let item = player?.currentItem {
+                    let composition = await PlayerItemFactory.videoComposition(take: take, folder: folder, asset: kept,
+                                                                               shape: take.currentShape, fps: 60,
+                                                                               pointer: editor.pointer, renderScale: scale)
+                    guard !Task.isCancelled else { return }
+                    item.videoComposition = composition
+                    if !isPlaying { seek(to: editor.playhead, force: true) }
+                    return
+                }
+                let built = try await PlayerItemFactory.asset(take: take, folder: folder)
+                let composition = await PlayerItemFactory.videoComposition(take: take, folder: folder, asset: built,
+                                                                           shape: take.currentShape, fps: 60,
+                                                                           pointer: editor.pointer, renderScale: scale)
                 guard !Task.isCancelled else { return }
-                install(AVPlayerItem(asset: built.asset), videoComposition: built.videoComposition, take: take)
+                takeAsset = built
+                install(AVPlayerItem(asset: built.asset), videoComposition: composition, take: take)
             } catch {
                 if let timeObserver { player?.removeTimeObserver(timeObserver) }
                 timeObserver = nil
                 player = nil
+                takeAsset = nil
             }
         }
     }
@@ -689,18 +795,34 @@ final class PreviewPlayer: PlaybackControlling {
         guard let editor, editor.selectedZoom != nil, let movie else { return }
         frameTask?.cancel()
         let t = editor.playhead
+        // The recording never needs more pixels than the canvas it is drawn into.
+        let canvas = editor.take.currentShape.pixelSize(recording: editor.take.size)
+        let limit = CGSize(width: canvas.width, height: canvas.height)
         frameTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(60))
-            guard !Task.isCancelled, let image = await Self.frame(of: movie, at: t) else { return }
+            guard !Task.isCancelled, let image = await Self.frame(of: movie, at: t, maximumSize: limit) else { return }
             guard let self, !Task.isCancelled else { return }
             recordingFrame = image
+            frameNumber += 1
             renderAim()
         }
     }
 
+    /// Draws the Aim still off the main actor at the stage's size. Zoom edits (aim, depth) do not
+    /// change it, so only a new frame, a look edit or a bigger stage draws again; the old still
+    /// stays up until the new one is ready.
     private func renderAim() {
-        guard let editor, let recordingFrame else { return }
-        aimImage = StillRenderer.render(take: editor.take, folder: folder, recording: recordingFrame, camera: nil, pointer: nil, ring: nil)
+        guard let editor, let recordingFrame, let aimRenderer else { return }
+        let take = editor.take
+        let canvas = take.currentShape.pixelSize(recording: take.size)
+        let backing = NSScreen.main?.backingScaleFactor ?? 2
+        let stage = CGSize(width: stagePoints.width * backing, height: stagePoints.height * backing)
+        let scale = StillRenderer.previewScale(canvas: CGSize(width: canvas.width, height: canvas.height), stagePixels: stage)
+        let key = AimKey(inputs: take.aimInputs, frame: frameNumber, scale: scale)
+        // A smaller stage keeps the sharper still it has.
+        if let last = aimRequested, last.inputs == key.inputs, last.frame == key.frame, last.scale >= key.scale { return }
+        aimRequested = key
+        aimRenderer.submit(AimRequest(take: take, folder: folder, recording: recordingFrame, scale: scale))
     }
 
     /// The output at the playhead in every shape, for the export sheet's plates.
@@ -727,9 +849,10 @@ final class PreviewPlayer: PlaybackControlling {
         return stills
     }
 
-    /// One recording frame, within a frame of `t`.
-    nonisolated private static func frame(of movie: URL, at t: Double) async -> CGImage? {
+    /// One recording frame, within a frame of `t`, no bigger than `maximumSize` when given.
+    nonisolated private static func frame(of movie: URL, at t: Double, maximumSize: CGSize? = nil) async -> CGImage? {
         let generator = AVAssetImageGenerator(asset: AVURLAsset(url: movie))
+        if let maximumSize { generator.maximumSize = maximumSize }
         let tolerance = CMTime(value: 1, timescale: 60)
         generator.requestedTimeToleranceBefore = tolerance
         generator.requestedTimeToleranceAfter = tolerance

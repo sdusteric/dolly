@@ -11,16 +11,18 @@ public struct StageView: View {
     let isPlaying: Bool
     let clicks: [Click]
     let aimed: () -> Void
+    let resized: (CGSize) -> Void
     @State private var showsAimHint: Bool
 
     public init(editor: EditorModel, image: CGImage?, player: AVPlayer?, isPlaying: Bool, clicks: [Click],
-                showsAimHint: Bool = true, aimed: @escaping () -> Void = {}) {
+                showsAimHint: Bool = true, aimed: @escaping () -> Void = {}, resized: @escaping (CGSize) -> Void = { _ in }) {
         self.editor = editor
         self.image = image
         self.player = player
         self.isPlaying = isPlaying
         self.clicks = clicks
         self.aimed = aimed
+        self.resized = resized
         _showsAimHint = State(initialValue: showsAimHint)
     }
 
@@ -64,6 +66,7 @@ public struct StageView: View {
                     .coordinateSpace(.named("stage"))
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 8))
+                .onChange(of: size, initial: true) { _, size in resized(size) }
                 .focusable()
                 .focusEffectDisabled()
                 .onKeyPress(phases: .down) { key in handle(key) }

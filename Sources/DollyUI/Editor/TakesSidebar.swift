@@ -25,6 +25,16 @@ nonisolated public enum TakesSidebarModel {
         }
     }
 
+    /// The list after saving `take`: its one entry swapped in place, or nil when the list does not
+    /// have it yet and needs a full reload.
+    public static func replacing(_ take: Take, at folder: URL, in entries: [TakeEntry]) -> [TakeEntry]? {
+        let target = folder.standardizedFileURL
+        guard let i = entries.firstIndex(where: { $0.folder.standardizedFileURL == target }) else { return nil }
+        var entries = entries
+        entries[i] = .ok(take, folder: entries[i].folder)
+        return entries
+    }
+
     /// The take to open after `folder` goes to the Trash: the next good one below it, else the one above.
     public static func neighbor(of folder: URL, in entries: [TakeEntry]) -> TakeEntry? {
         let good = entries.filter { if case .ok = $0 { true } else { false } }
