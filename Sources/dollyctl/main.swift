@@ -16,6 +16,7 @@ usage:
   dollyctl render <take-folder> --frames 0,8.6 --out <dir> [--shape original|16x9|1x1|4x5|9x16]
   dollyctl captions <take-folder> --srt
   dollyctl pointer <take-folder>
+  dollyctl recover <take-folder>     rebuild take.json for a window take whose stop never saved it
   dollyctl fixture shelf-demo --out <dir>
 """
 
@@ -123,6 +124,27 @@ case "pointer":
         print(PointerLog.csv(try PointerLog.read(folder.appending(path: TakeStore.pointerName))), terminator: "")
     } catch {
         fail("can't read the pointer log: \(error.localizedDescription)")
+    }
+
+case "recover":
+    guard let path = rest.first else { fail(usage) }
+    let folder = URL(filePath: path, directoryHint: .isDirectory).standardizedFileURL
+    let store = TakeStore(paths: DollyPaths(environment: ProcessInfo.processInfo.environment))
+    // Only a folder in the takes folder Dolly reads, so the take opens where the owner looks for it.
+    guard let id = UUID(uuidString: folder.lastPathComponent),
+          store.folder(for: id).standardizedFileURL.path(percentEncoded: false) == folder.path(percentEncoded: false) else {
+        fail("\(path) is not a take folder in \(store.paths.takesFolder.path(percentEncoded: false))")
+    }
+    do {
+        let take = try await TakeRecovery.rebuild(folder, store: store)
+        let poster = folder.appending(path: TakeStore.posterName)
+        if !FileManager.default.fileExists(atPath: poster.path(percentEncoded: false)) {
+            try await PosterMaker.poster(movie: folder.appending(path: TakeStore.movieName), at: min(1, take.duration / 2), to: poster)
+        }
+        print("recovered \(take.name): \(TimeText.short(take.duration)), \(take.zooms.count) zoom(s), "
+              + "\(Int(take.size.width)) x \(Int(take.size.height)) pt at \(take.pixelScale)x")
+    } catch {
+        fail("can't recover \(path): \(error)")
     }
 
 case "fixture":
