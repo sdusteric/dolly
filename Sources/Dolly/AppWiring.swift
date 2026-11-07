@@ -402,18 +402,21 @@ final class EditorController: NSObject, NSWindowDelegate {
             return
         } catch {
             log.error("saving take failed: \(error.localizedDescription)")
-            if !saveFailureShown {
-                saveFailureShown = true
-                alertSaveFailed(error, discard: nil)
-            }
+            if !saveFailureShown { saveFailureShown = alertSaveFailed(error, discard: nil) }
         }
         refreshOpenEntry()
     }
 
     /// A sheet on the editor: the edits are still open and Dolly saves again on the next change.
     /// With `discard`, the owner can drop the edits and go on to the other take.
-    private func alertSaveFailed(_ error: any Error, discard: (() -> Void)?) {
-        guard let window, window.attachedSheet == nil else { return NSSound.beep() }
+    /// Returns whether the sheet showed; with another sheet up it only beeps, and the next failed
+    /// save tries again.
+    @discardableResult
+    private func alertSaveFailed(_ error: any Error, discard: (() -> Void)?) -> Bool {
+        guard let window, window.attachedSheet == nil else {
+            NSSound.beep()
+            return false
+        }
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "Couldn't save this take"
@@ -423,6 +426,7 @@ final class EditorController: NSObject, NSWindowDelegate {
         alert.beginSheetModal(for: window) { response in
             if response == .alertSecondButtonReturn { discard?() }
         }
+        return true
     }
 
     private func save(_ take: Take) {

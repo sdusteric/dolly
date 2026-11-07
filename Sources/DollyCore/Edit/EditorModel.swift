@@ -143,6 +143,8 @@ public final class EditorModel {
     /// Clamps zooms into the new trim; a zoom left shorter than its minimum is removed.
     public func setTrim(_ r: ClosedRange<Double>) {
         let range = max(r.lowerBound, 0)...min(r.upperBound, take.duration)
+        // The trim stops before cuts and speed-ups leave less than half a second of clip.
+        guard TimeMap(trim: range, regions: take.speedRegions).duration >= Self.clipMinimum else { return }
         // During a drag, start from the zooms before it, so dragging back brings them back.
         let zooms = gestureStart?.zooms ?? take.zooms
         change { take in

@@ -73,4 +73,36 @@ import Testing
         e.removeSelected()
         #expect(e.take.speedRegions.isEmpty && e.selection == nil)
     }
+
+    /// Review: resizing a cut or moving the trim never cuts the whole clip away.
+    @Test func resizeAndTrimNeverCutEverything() throws {
+        let e = editor()
+        e.addSpeed(from: 2, to: 4, speed: .cut)
+        let id = try #require(e.take.speedRegions.first?.id)
+        e.resizeSpeed(id, edge: .start, to: 0)
+        e.resizeSpeed(id, edge: .end, to: 10)
+        #expect(e.take.outputDuration >= EditorModel.clipMinimum)
+        e.resizeSpeed(id, edge: .end, to: 9.8)
+        #expect(e.take.outputDuration >= EditorModel.clipMinimum)
+        let before = e.take.trim
+        e.setTrim(2...4)
+        #expect(e.take.outputDuration >= EditorModel.clipMinimum)
+        #expect(e.take.trim == before || e.take.outputDuration >= EditorModel.clipMinimum)
+    }
 }
+
+@Suite struct TimeMapGridTests {
+    /// Review: piece edges sit on the composition's 1/600 s grid, so clip times built from them
+    /// and from CMTime never drift apart, however many pieces there are.
+    @Test func piecesSitOnTheCompositionGrid() {
+        var regions: [SpeedRegion] = []
+        for i in 0..<12 { regions.append(SpeedRegion(start: Double(i) * 0.8 + 0.1234567, end: Double(i) * 0.8 + 0.4567891, speed: i % 2 == 0 ? .cut : .fast(3))) }
+        let map = TimeMap(trim: 0.0101...10.0303, regions: regions)
+        for piece in map.pieces {
+            for t in [piece.start, piece.end, piece.outputStart, piece.outputEnd] {
+                #expect(abs(t * 600 - (t * 600).rounded()) < 1e-6)
+            }
+        }
+    }
+}
+

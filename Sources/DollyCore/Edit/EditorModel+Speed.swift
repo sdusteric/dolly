@@ -100,11 +100,11 @@ extension EditorModel {
     private func editSpeed(_ id: SpeedRegion.ID, _ body: @escaping (inout SpeedRegion, Double, Double) -> Void) {
         guard let region = speedRegion(id) else { return }
         let (lo, hi) = room(around: (region.start + region.end) / 2, excluding: id)
-        change { take in
-            var regions = take.speedRegions
-            guard let i = regions.firstIndex(where: { $0.id == id }) else { return }
-            body(&regions[i], lo, hi)
-            take.speedRegions = regions
-        }
+        var regions = take.speedRegions
+        guard let i = regions.firstIndex(where: { $0.id == id }) else { return }
+        body(&regions[i], lo, hi)
+        // A resize that would cut the whole clip stops where it is.
+        guard TimeMap(trim: take.trim, regions: regions).duration >= Self.clipMinimum else { return }
+        change { $0.speedRegions = regions }
     }
 }

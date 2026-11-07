@@ -63,6 +63,13 @@ public final class ExportSheetModel {
         let list = ordered
         var urls: [URL] = []
         for (i, shape) in list.enumerated() {
+            // Quit between two shapes: stop before the next one starts.
+            if Task.isCancelled {
+                self.job = nil
+                state = .ready
+                if !urls.isEmpty { onExported(urls) }
+                return
+            }
             let plan = plan(for: shape), folder = takeFolder, pointer = editor.pointer, exporter = exporter
             let count = Double(list.count)
             let job = Task {
@@ -120,6 +127,7 @@ public final class ExportSheetModel {
 
     /// Quit: cancels a running export and waits, so its scratch folder is gone before Dolly exits.
     public func stopForQuit() async {
+        running?.cancel()
         cancel()
         await running?.value
     }

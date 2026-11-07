@@ -70,13 +70,13 @@ public enum PlayerItemFactory {
                 }
             }
             if let webcam { webcam.insert(piece, at: cursor, length: range.duration, into: composition, track: &webcamTrack) }
-            var length = range.duration
+            // The map's own clip length, on the same 1/600 s grid, so the compositor's map and the
+            // composition agree on every frame.
+            let length = time(piece.outputEnd - piece.outputStart)
             if piece.rate != 1 {
-                let scaled = CMTimeMultiplyByFloat64(length, multiplier: 1 / piece.rate)
-                composition.scaleTimeRange(CMTimeRange(start: cursor, duration: length), toDuration: scaled)
-                length = scaled
+                composition.scaleTimeRange(CMTimeRange(start: cursor, duration: range.duration), toDuration: length)
             }
-            cursor = CMTimeAdd(cursor, length)
+            cursor = CMTimeAdd(cursor, piece.rate != 1 ? length : range.duration)
         }
         return TakeAsset(asset: composition, inputs: take.compositionInputs, trackID: track.trackID, webcamID: webcamTrack?.trackID,
                          map: map, duration: cursor)
@@ -113,10 +113,19 @@ public enum PlayerItemFactory {
             let at = CMTimeAdd(cursor, PlayerItemFactory.time(from - piece.start))
             let duration = CMTimeMinimum(PlayerItemFactory.time(to - from), CMTimeSubtract(CMTimeAdd(cursor, length), at))
             guard duration > .zero else { return }
-            if track == nil { track = composition.addMutableTrack(withMediaType: type, preferredTrackID: kCMPersistentTrackID_Invalid) }
+            let created = track == nil
+            if created { track = composition.addMutableTrack(withMediaType: type, preferredTrackID: kCMPersistentTrackID_Invalid) }
             guard let target = track else { return }
             let range = CMTimeRange(start: PlayerItemFactory.time(from - offset), duration: duration)
-            try? target.insertTimeRange(range, of: self.track, at: at)
+            do {
+                try target.insertTimeRange(range, of: self.track, at: at)
+            } catch {
+                // An empty track would still reach the compositor and AVAssetReader, which refuses it.
+                if created {
+                    composition.removeTrack(target)
+                    track = nil
+                }
+            }
         }
     }
 

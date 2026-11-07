@@ -9,22 +9,28 @@ public struct TimeMap: Hashable, Sendable {
         public let end: Double
         public let rate: Double
         public let outputStart: Double
-        public var outputEnd: Double { outputStart + (end - start) / rate }
+        public let outputEnd: Double
     }
 
     /// Shorter regions and pieces are dropped, so a stray click never makes a sliver.
     public static let shortest = 0.05
 
+    /// Every edge sits on the composition's 1/600 s timescale, so clip times computed here and the
+    /// CMTimes the composition is built from never drift apart.
+    public static func snap(_ t: Double) -> Double { (t * 600).rounded() / 600 }
+
     public let trim: ClosedRange<Double>
     public let pieces: [Piece]
 
     public init(trim: ClosedRange<Double>, regions: [SpeedRegion]) {
+        let lower = Self.snap(trim.lowerBound)
+        let trim = lower...max(Self.snap(trim.upperBound), lower)
         self.trim = trim
         // Clip to the trim, sort, and let the earlier region win where two overlap.
         var kept: [(start: Double, end: Double, speed: SpeedRegion.Speed)] = []
         var from = trim.lowerBound
         for r in regions.sorted(by: { $0.start < $1.start }) {
-            let start = max(r.start, from, trim.lowerBound), end = min(r.end, trim.upperBound)
+            let start = max(Self.snap(r.start), from, trim.lowerBound), end = min(Self.snap(r.end), trim.upperBound)
             guard end - start >= Self.shortest else { continue }
             kept.append((start, end, r.speed))
             from = end
@@ -33,7 +39,8 @@ public struct TimeMap: Hashable, Sendable {
         var output = 0.0, cursor = trim.lowerBound
         func add(_ start: Double, _ end: Double, _ rate: Double) {
             guard end - start >= Self.shortest else { return }
-            let piece = Piece(start: start, end: end, rate: rate, outputStart: output)
+            let piece = Piece(start: start, end: end, rate: rate, outputStart: output,
+                              outputEnd: output + Self.snap((end - start) / rate))
             pieces.append(piece)
             output = piece.outputEnd
         }
@@ -45,7 +52,8 @@ public struct TimeMap: Hashable, Sendable {
         add(cursor, trim.upperBound, 1)
         // A take cut down to nothing plays its whole trim instead.
         if output < Self.shortest {
-            pieces = [Piece(start: trim.lowerBound, end: trim.upperBound, rate: 1, outputStart: 0)]
+            pieces = [Piece(start: trim.lowerBound, end: trim.upperBound, rate: 1, outputStart: 0,
+                            outputEnd: trim.upperBound - trim.lowerBound)]
         }
         self.pieces = pieces
     }
