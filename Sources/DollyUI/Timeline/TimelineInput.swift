@@ -9,20 +9,21 @@ public protocol PlaybackControlling: AnyObject {
 }
 
 nonisolated public enum TimelineAction: Hashable, Sendable {
-    case addZoom, addCaption, removeSelected, selectNext, togglePlay, undo, redo
+    case addZoom, addCaption, addCut, removeSelected, selectNext, togglePlay, undo, redo
     /// nil is one frame forward or back by the key; the sign comes from the key.
     case step(seconds: Double?)
     case stepBack
     case shuttle(Double)
 }
 
-/// The timeline's keys (spec 6.3): Space, J K L, arrows (Shift one second), Tab, Z, C, Delete, undo.
+/// The timeline's keys (spec 6.3): Space, J K L, arrows (Shift one second), Tab, Z, C, X, Delete, undo.
 public enum TimelineInput {
     nonisolated public static func action(key: KeyEquivalent, shift: Bool, command: Bool) -> TimelineAction? {
         switch key {
         case "z" where command: return shift ? .redo : .undo
         case "z", "Z": return command ? nil : .addZoom
         case "c", "C": return command ? nil : .addCaption
+        case "x", "X": return command ? nil : .addCut
         case .delete, .deleteForward: return .removeSelected
         case .tab: return .selectNext
         case " ", .space: return .togglePlay
@@ -42,12 +43,8 @@ public enum TimelineInput {
         switch action {
         case .addZoom: editor.addZoom(at: editor.playhead)
         case .addCaption: editor.addCaption(at: editor.playhead)
-        case .removeSelected:
-            switch editor.selection {
-            case .zoom(let id): editor.remove(id)
-            case .caption(let id): editor.removeCaption(id)
-            case .camera, nil: break
-            }
+        case .addCut: editor.addCut(at: editor.playhead)
+        case .removeSelected: editor.removeSelected()
         case .selectNext: editor.selectNext()
         case .togglePlay: playback?.togglePlay()
         case .undo: editor.undo()

@@ -8,6 +8,7 @@ public struct CompositionInputs: Hashable, Sendable {
     public let microphoneOffset: Double?
     public let cameraFile: String?
     public let cameraOffset: Double?
+    public let speeds: [SpeedRegion]
 }
 
 /// What the Aim still is drawn from: the recording at 1x with the look, in the take's shape.
@@ -30,7 +31,8 @@ public struct AimInputs: Hashable, Sendable {
 
 extension Take {
     public var compositionInputs: CompositionInputs {
-        CompositionInputs(trim: trim, microphoneOffset: microphoneOffset, cameraFile: camera?.file, cameraOffset: camera?.startOffset)
+        CompositionInputs(trim: trim, microphoneOffset: microphoneOffset, cameraFile: camera?.file, cameraOffset: camera?.startOffset,
+                          speeds: speedRegions)
     }
 
     public var aimInputs: AimInputs { AimInputs(look: look, shape: currentShape, size: size) }

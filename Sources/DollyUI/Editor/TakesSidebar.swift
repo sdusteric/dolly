@@ -17,7 +17,7 @@ nonisolated public enum TakesSidebarModel {
             case .ok(let take, let folder):
                 let detail = take.exports.isEmpty
                     ? "\(take.zooms.count) \(take.zooms.count == 1 ? "zoom" : "zooms")" : "exported"
-                return TakeRow(takeID: take.id, title: take.name, meta: "\(TimeText.short(take.duration)) · \(detail)",
+                return TakeRow(takeID: take.id, title: take.name, meta: "\(TimeText.short(take.outputDuration)) · \(detail)",
                                folder: folder, isBroken: false)
             case .broken(let folder, let reason):
                 return TakeRow(takeID: nil, title: reason, meta: "Right-click to show it in Finder", folder: folder, isBroken: true)

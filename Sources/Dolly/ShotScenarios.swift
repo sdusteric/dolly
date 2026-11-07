@@ -62,6 +62,11 @@ enum ShotScenarios {
             editor.setCamera { $0.corner = .topLeft }
             editor.playhead = 12.4
             if let fourth = editor.take.captions?.items.dropFirst(3).first { editor.selectCaption(fourth.id) }
+        case "studio-speed":
+            editor.setBackdrop(.gradient(id: "harbor"))
+            editor.addSpeed(from: 29.5, to: 33.5, speed: .cut)
+            editor.addSpeed(from: 37, to: 43, speed: .fast(4))
+            editor.playhead = 36.2
         default:
             break
         }

@@ -24,8 +24,8 @@ public final class PreviewPlayer: PlaybackControlling {
     @ObservationIgnored private var frameTask: Task<Void, Never>?
     /// The player item's asset; kept while an edit leaves its inputs alone.
     @ObservationIgnored private var takeAsset: PlayerItemFactory.TakeAsset?
-    /// Composition time 0 is the trim start.
-    @ObservationIgnored private var offset = 0.0
+    /// Composition time to take time, from the installed item.
+    @ObservationIgnored private var map = TimeMap(trim: 0...0, regions: [])
     @ObservationIgnored private var lastSeek = -1.0
     /// The stage's size in points, from StageView; the Aim still is drawn at about this size.
     @ObservationIgnored private var stagePoints = CGSize.zero
@@ -125,7 +125,8 @@ public final class PreviewPlayer: PlaybackControlling {
             editor.playhead = max(editor.playhead - 1, editor.take.trim.lowerBound)
             return
         }
-        if rate > 0, editor.playhead >= editor.take.trim.upperBound - 0.05 {
+        // At the end of the clip (a cut can end it before the trim does), play starts over.
+        if rate > 0, map.output(at: editor.playhead) >= map.duration - 0.05 {
             editor.playhead = editor.take.trim.lowerBound
             seek(to: editor.playhead)
         }
@@ -161,6 +162,7 @@ public final class PreviewPlayer: PlaybackControlling {
                                                                            pointer: editor.pointer, renderScale: scale)
                 guard !Task.isCancelled else { return }
                 takeAsset = built
+                map = built.map
                 install(AVPlayerItem(asset: built.asset), videoComposition: composition, take: take)
             } catch {
                 if let timeObserver { player?.removeTimeObserver(timeObserver) }
@@ -173,7 +175,6 @@ public final class PreviewPlayer: PlaybackControlling {
 
     private func install(_ item: AVPlayerItem, videoComposition: AVVideoComposition, take: Take) {
         item.videoComposition = videoComposition
-        offset = take.trim.lowerBound
         let wasPlaying = isPlaying
         let player = player ?? makePlayer()
         player.replaceCurrentItem(with: item)
@@ -192,7 +193,7 @@ public final class PreviewPlayer: PlaybackControlling {
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(value: 1, timescale: 30), queue: .main) { [weak self] time in
             MainActor.assumeIsolated {
                 guard let self, self.isPlaying, let editor = self.editor else { return }
-                let t = self.offset + time.seconds
+                let t = self.map.source(at: time.seconds)
                 self.lastSeek = t
                 editor.playhead = t
             }
@@ -204,7 +205,7 @@ public final class PreviewPlayer: PlaybackControlling {
     private func seek(to t: Double, force: Bool = false) {
         guard let player, force || abs(t - lastSeek) > 0.0005 else { return }
         lastSeek = t
-        let time = CMTime(seconds: max(t - offset, 0), preferredTimescale: 600)
+        let time = CMTime(seconds: map.output(at: t), preferredTimescale: 600)
         player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
     }
 

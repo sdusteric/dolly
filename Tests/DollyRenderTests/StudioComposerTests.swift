@@ -148,4 +148,32 @@ func bitmap(_ image: CIImage) -> [UInt8] {
             #expect(p.audioTrackCount == 1 && abs(p.durationSeconds - (trim.upperBound - trim.lowerBound)) <= 1.0 / 30 + 0.03)
         }
     }
+
+    /// Cuts and speed-ups shorten the clip; the sound keeps playing outside the sped-up part.
+    @Test func cutsAndSpeedUpsShortenTheExport() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "dolly-speed-export-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let folder = root.appending(path: "take"), out = root.appending(path: "out")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try await SyntheticTake.writeMovie(seconds: 4, fps: 60, variableRate: true, to: folder.appending(path: TakeStore.movieName))
+        try await SyntheticTake.writeCamera(to: folder.appending(path: "camera.mov"), seconds: 4, color: (220, 40, 40))
+        try SyntheticTake.writeTone(to: folder.appending(path: TakeStore.audioName), seconds: 4)
+        let cases: [([SpeedRegion], Double)] = [
+            ([SpeedRegion(start: 1, end: 2, speed: .cut)], 3),
+            ([SpeedRegion(start: 0.5, end: 2.5, speed: .fast(4))], 2.5),
+            ([SpeedRegion(start: 0.2, end: 0.9, speed: .cut), SpeedRegion(start: 1.3337, end: 3.4071, speed: .fast(8))], 4 - 0.7 - 2.0734 * 7 / 8),
+        ]
+        for (regions, expected) in cases {
+            var take = Take(name: "Speed", target: .display, size: CGSize(width: 1440, height: 900), pixelScale: 1, fps: 60, duration: 4)
+            take.camera = CameraTrack(startOffset: 0.137)
+            take.microphoneOffset = 0.0731
+            take.speedRegions = regions
+            #expect(abs(take.outputDuration - expected) < 0.001)
+            let url = try await Exporter().export(ExportPlan(take: take, shape: .wide16x9, fps: 30, folder: out), takeFolder: folder,
+                                                  pointer: nil, progress: { _ in })
+            let p = await VideoProbe.probe(url)
+            #expect(p.videoTrackCount == 1 && p.audioTrackCount == 1)
+            #expect(abs(p.durationSeconds - expected) <= 1.0 / 30 + 0.03, "\(regions.map(\.speed))")
+        }
+    }
 }

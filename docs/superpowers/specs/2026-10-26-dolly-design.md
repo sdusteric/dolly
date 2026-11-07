@@ -27,7 +27,6 @@ Record, edit, export:
 
 - Webcam overlay, AI captions or transcripts, text overlays and titles, templates, music.
 - Posting to X or Threads (no accounts, no API keys). The owner uploads by hand.
-- Cutting out the middle of a take (only trimming the start and end). See 15.
 - Editing several takes into one clip.
 - GIF export (later, if asked).
 
@@ -162,6 +161,15 @@ Shows the clip in the chosen shape. Two modes:
 - Space plays and pauses. J, K, L shuttle. Left and right move the playhead one frame (Shift one second). Tab moves selection to the next zoom.
 - Undo and redo cover every edit (`⌘Z`, `⇧⌘Z`).
 
+### 6.3.1 Cuts and speed-ups **(my calls, 2026-11-07)**
+
+- A **Speed** lane sits under Video. Each region on it is a stretch of the take that is cut out of the clip ("Cut", in the control tone) or played faster ("2×", "4×" or "8×", in ink). Cut stretches are shaded on the filmstrip like the trimmed ends.
+- Drag on the empty Speed lane to mark a cut. `X` cuts 2 s from the playhead (`⌘X` stays the Edit menu's). Drag a region's ends to resize it and its middle to move it; Delete removes it. Regions never overlap and never leave less than 0.5 s of clip.
+- With a region selected, the line under the timeline shows Cut / 2× / 4× / 8×, what it does ("Removes 2.0 s", "Plays 6.0 s in 1.5 s") and Remove. The inspector keeps its tab.
+- The timeline stays in take time. The clock, the length check, the sidebar length and Shelf show the clip's length after cuts and speed-ups.
+- One time map (DollyCore `TimeMap`) turns take time into clip time for the player, the compositor, the exporter and the .srt, so they agree. Zooms, the pointer, captions and the camera bubble keep their take times; a zoom over a cut simply jumps with the cut. A caption wholly inside a cut is left out of the .srt.
+- Sped-up stretches are silent: the microphone and the recording's sound are left out there, since fast speech is noise. The webcam speeds up with the screen.
+
 ### 6.4 The inspector (288 pt)
 
 With a zoom selected: its name ("Zoom 2 of 5") and times, "From your click at 0:07.9", Hold on the click or Follow pointer, Depth slider (1x to 3x), Move in and Move out times (0.2 to 1.5 s), Remove this zoom.
@@ -294,6 +302,8 @@ Editor UI motion only; the clip's camera and pointer motion are content (section
 | Record countdown 3, 2, 1 | A few times a month | State indication | Allowed: each number crossfades in 200 ms. Reduce Motion: instant. |
 | Export progress | Occasional | State indication; the number is data | Bar width follows real progress; no easing for style. |
 | "Saved 2 files" confirmation | Occasional | State indication | Allowed: 160 ms opacity. |
+| Cut or speed-up added or removed on the Speed lane (X, drag, Delete, undo) | Occasional | Preventing a jarring change | Allowed: the strip bridge, 160 ms opacity from 0.97 scale. Reduce Motion: opacity only. |
+| The speed row replacing the hint line on selection | Tens per session | none | Rejected. Instant. |
 | Shape switch on the stage | Tens per session | none ("looks cool") | Rejected. The stage re-renders at once. |
 | Hover lift on strips | Hundreds per session | none | Rejected. A cursor change (resize at ends, move in the middle) is the hover cue. |
 
@@ -337,7 +347,7 @@ M1 is done when the gates pass and the owner has watched one real exported demo 
 None block M1. Answers would change later milestones:
 
 1. Do your demos need voice-over (microphone), or are they always silent?
-2. Do you ever need to cut out the middle of a take, or is trimming the ends enough?
+2. ~~Do you ever need to cut out the middle of a take?~~ Built on 2026-11-07 as cuts and speed-ups (6.3.1), on the owner's go-ahead to "do all" from the next-steps list.
 3. Should Dolly also export a GIF for places that do not autoplay video?
 
 ## 15. Decisions to review (my calls)
@@ -348,7 +358,7 @@ None block M1. Answers would change later milestones:
 4. Zoom rules in 5.1 (3.0 s grouping, 0.6 s in, 1.5 s hold, 0.5 s out, 2.0x default).
 5. Hotkey `⌃⌥⌘R`.
 6. No gradient backgrounds in v1 (flat colors and a picture), to keep the clip in the family's flat style.
-7. Trim the ends only, no cuts in v1.
+7. Trim the ends only, no cuts in v1. Reversed 2026-11-07: cuts and speed-ups (6.3.1).
 8. Takes and exports in `~/Movies/Dolly`.
 9. Clicks without any extra permission, even if that means polling.
 10. Zoom names read from the pixels with on-device Vision text recognition, never from Accessibility (4.6).

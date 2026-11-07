@@ -40,7 +40,8 @@ nonisolated public enum StudioInspectorModel {
         case .zoom: .zooms
         case .caption: .captions
         case .camera: .camera
-        case nil: previous
+        // A cut's controls sit under the timeline; the inspector stays where it was.
+        case .speed, nil: previous
         }
     }
 

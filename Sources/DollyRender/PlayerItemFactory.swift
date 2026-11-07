@@ -14,7 +14,7 @@ public enum PlayerItemFactory {
         public let inputs: CompositionInputs
         let trackID: CMPersistentTrackID
         let webcamID: CMPersistentTrackID?
-        let start: Double
+        public let map: TimeMap
         let duration: CMTime
     }
 
@@ -33,30 +33,81 @@ public enum PlayerItemFactory {
         }
         let sourceDuration = try await source.load(.duration).seconds
         let start = max(take.trim.lowerBound, 0)
-        let end = min(take.trim.upperBound, sourceDuration)
-        let range = CMTimeRange(start: CMTime(seconds: start, preferredTimescale: 600),
-                                end: CMTime(seconds: end, preferredTimescale: 600))
+        let end = max(min(take.trim.upperBound, sourceDuration), start)
+        let map = TimeMap(trim: start...end, regions: take.speedRegions)
 
         let composition = AVMutableComposition()
         guard let track = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else {
             throw CocoaError(.featureUnsupported)
         }
-        try track.insertTimeRange(range, of: video, at: .zero)
+        // Sound comes from the microphone file when there is one, else from the recording.
         let microphone = folder.appending(path: TakeStore.audioName)
+        var sound: Side?
         if let offset = take.microphoneOffset, FileManager.default.fileExists(atPath: microphone.path(percentEncoded: false)) {
-            _ = try await insertSide(microphone, type: .audio, offset: offset, trim: start...end, limit: range.duration,
-                                     into: composition)
-        } else if let audio = try await source.loadTracks(withMediaType: .audio).first,
-                  let audioTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) {
-            try audioTrack.insertTimeRange(range, of: audio, at: .zero)
+            sound = await Side.load(microphone, type: .audio, offset: offset)
+        } else if let audio = try await source.loadTracks(withMediaType: .audio).first {
+            sound = Side(asset: source, track: audio, offset: 0, length: sourceDuration, type: .audio)
         }
-        var webcamID: CMPersistentTrackID?
+        var webcam: Side?
         if let camera = take.camera {
-            webcamID = try await insertSide(folder.appending(path: camera.file), type: .video, offset: camera.startOffset,
-                                            trim: start...end, limit: range.duration, into: composition)
+            webcam = await Side.load(folder.appending(path: camera.file), type: .video, offset: camera.startOffset)
         }
-        return TakeAsset(asset: composition, inputs: take.compositionInputs, trackID: track.trackID, webcamID: webcamID,
-                         start: start, duration: range.duration)
+        var soundTrack: AVMutableCompositionTrack?, webcamTrack: AVMutableCompositionTrack?
+        var cursor = CMTime.zero
+        for piece in map.pieces {
+            let range = CMTimeRange(start: time(piece.start), end: time(piece.end))
+            try track.insertTimeRange(range, of: video, at: cursor)
+            // Sped-up stretches are silent: fast speech is noise.
+            if piece.rate == 1, let sound { sound.insert(piece, at: cursor, length: range.duration, into: composition, track: &soundTrack) }
+            if let webcam { webcam.insert(piece, at: cursor, length: range.duration, into: composition, track: &webcamTrack) }
+            var length = range.duration
+            if piece.rate != 1 {
+                let scaled = CMTimeMultiplyByFloat64(length, multiplier: 1 / piece.rate)
+                composition.scaleTimeRange(CMTimeRange(start: cursor, duration: length), toDuration: scaled)
+                length = scaled
+            }
+            cursor = CMTimeAdd(cursor, length)
+        }
+        return TakeAsset(asset: composition, inputs: take.compositionInputs, trackID: track.trackID, webcamID: webcamTrack?.trackID,
+                         map: map, duration: cursor)
+    }
+
+    static func time(_ seconds: Double) -> CMTime { CMTime(seconds: seconds, preferredTimescale: 600) }
+
+    /// A side file (the webcam or the microphone) or the recording's own sound, where file time 0
+    /// is `offset` seconds into the take. A missing, unreadable or empty file is nil, so the take
+    /// still plays and exports without it.
+    struct Side {
+        /// Held so the track's asset lives until the track is inserted.
+        let asset: AVAsset
+        let track: AVAssetTrack
+        let offset: Double
+        let length: Double
+        let type: AVMediaType
+
+        static func load(_ url: URL, type: AVMediaType, offset: Double) async -> Side? {
+            guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else { return nil }
+            let asset = AVURLAsset(url: url)
+            guard let track = try? await asset.loadTracks(withMediaType: type).first,
+                  let length = try? await asset.load(.duration).seconds, length > 0 else { return nil }
+            return Side(asset: asset, track: track, offset: offset, length: length, type: type)
+        }
+
+        /// Puts the part of this file that falls inside `piece` at the piece's place in the clip,
+        /// making the composition track the first time anything goes in. It never runs past the
+        /// piece's video (`length` from `cursor`): AVAssetReader refuses a side track that does.
+        func insert(_ piece: TimeMap.Piece, at cursor: CMTime, length: CMTime, into composition: AVMutableComposition,
+                    track: inout AVMutableCompositionTrack?) {
+            let from = max(piece.start, offset), to = min(piece.end, offset + self.length)
+            guard to - from > 0.001 else { return }
+            let at = CMTimeAdd(cursor, PlayerItemFactory.time(from - piece.start))
+            let duration = CMTimeMinimum(PlayerItemFactory.time(to - from), CMTimeSubtract(CMTimeAdd(cursor, length), at))
+            guard duration > .zero else { return }
+            if track == nil { track = composition.addMutableTrack(withMediaType: type, preferredTrackID: kCMPersistentTrackID_Invalid) }
+            guard let target = track else { return }
+            let range = CMTimeRange(start: PlayerItemFactory.time(from - offset), duration: duration)
+            try? target.insertTimeRange(range, of: self.track, at: at)
+        }
     }
 
     /// Dolly's compositor over `asset` for the take as it is now. Much cheaper than the asset, so the
@@ -73,7 +124,7 @@ public enum PlayerItemFactory {
         let instruction = DollyInstruction(
             timeRange: CMTimeRange(start: .zero, duration: asset.duration), trackID: asset.trackID,
             composer: FrameComposer.make(take: take, folder: folder, layout: layout, detail: renderScale),
-            camera: camera, pointer: pointer, recordingOffset: asset.start, webcam: webcam, captions: take.captions,
+            camera: camera, pointer: pointer, timeMap: asset.map, webcam: webcam, captions: take.captions,
             renderScale: renderScale
         )
         var configuration = AVVideoComposition.Configuration()
@@ -85,35 +136,5 @@ public enum PlayerItemFactory {
         configuration.colorTransferFunction = AVVideoTransferFunction_ITU_R_709_2
         configuration.colorYCbCrMatrix = AVVideoYCbCrMatrix_ITU_R_709_2
         return AVVideoComposition(configuration: configuration)
-    }
-
-    /// Puts the part of a side file (the webcam or the microphone) that falls inside the trim into
-    /// the composition, where file time 0 is `offset` seconds into the take. It never runs past
-    /// `limit`, the trimmed video's length, which the one compositor instruction covers. A missing,
-    /// unreadable or odd file adds nothing, so the take still plays and exports.
-    static func insertSide(_ url: URL, type: AVMediaType, offset: Double, trim: ClosedRange<Double>, limit: CMTime,
-                           into composition: AVMutableComposition) async throws -> CMPersistentTrackID? {
-        guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else { return nil }
-        let asset = AVURLAsset(url: url)
-        guard let sourceTrack = try? await asset.loadTracks(withMediaType: type).first,
-              let length = try? await asset.load(.duration).seconds, length > 0 else { return nil }
-        let from = max(trim.lowerBound - offset, 0), to = min(trim.upperBound - offset, length)
-        guard to > from, let track = composition.addMutableTrack(withMediaType: type, preferredTrackID: kCMPersistentTrackID_Invalid) else {
-            return nil
-        }
-        let at = CMTime(seconds: max(offset - trim.lowerBound, 0), preferredTimescale: 600)
-        let duration = CMTimeMinimum(CMTime(seconds: to - from, preferredTimescale: 600), CMTimeSubtract(limit, at))
-        guard duration > .zero else {
-            composition.removeTrack(track)
-            return nil
-        }
-        do {
-            try track.insertTimeRange(CMTimeRange(start: CMTime(seconds: from, preferredTimescale: 600), duration: duration),
-                                      of: sourceTrack, at: at)
-        } catch {
-            composition.removeTrack(track)
-            return nil
-        }
-        return track.trackID
     }
 }

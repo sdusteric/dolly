@@ -13,6 +13,8 @@ nonisolated public enum TimelineHit: Hashable, Sendable {
     case cameraGap(Int, StripPart)
     case caption(Caption.ID, StripPart)
     case emptyCaptionLane(Double)
+    case speed(SpeedRegion.ID, StripPart)
+    case emptySpeedLane(Double)
     case trim(TrimEdge)
     case ruler(Double)
     case none
@@ -24,11 +26,13 @@ nonisolated public struct TimelineLayout: Sendable {
     public static let labelColumn: CGFloat = 64
     public static let ruler = CGRect(x: 0, y: 0, width: 0, height: 18)
     public static let videoLane = CGRect(x: 0, y: 24, width: 0, height: 44)
-    public static let zoomLane = CGRect(x: 0, y: 72, width: 0, height: 46)
-    public static let cameraLane = CGRect(x: 0, y: 122, width: 0, height: 26)
-    public static let captionLane = CGRect(x: 0, y: 152, width: 0, height: 30)
-    public static let clickLane = CGRect(x: 0, y: 186, width: 0, height: 18)
-    public static let height: CGFloat = 204
+    /// Cuts and speed-ups, under the video they change.
+    public static let speedLane = CGRect(x: 0, y: 72, width: 0, height: 26)
+    public static let zoomLane = CGRect(x: 0, y: 102, width: 0, height: 46)
+    public static let cameraLane = CGRect(x: 0, y: 152, width: 0, height: 26)
+    public static let captionLane = CGRect(x: 0, y: 182, width: 0, height: 30)
+    public static let clickLane = CGRect(x: 0, y: 216, width: 0, height: 18)
+    public static let height: CGFloat = 234
     /// The camera bar and caption chips sit 3 pt inside their lanes.
     public static let laneInset: CGFloat = 3
     public static let stripTop: CGFloat = 4
@@ -66,6 +70,11 @@ nonisolated public struct TimelineLayout: Sendable {
                width: max(x(for: caption.end) - x(for: caption.start), 1), height: Self.captionLane.height - 2 * Self.laneInset)
     }
 
+    public func speedRect(for region: SpeedRegion) -> CGRect {
+        CGRect(x: x(for: region.start), y: Self.speedLane.minY + Self.laneInset,
+               width: max(x(for: region.end) - x(for: region.start), 1), height: Self.speedLane.height - 2 * Self.laneInset)
+    }
+
     /// Where the camera shows on its lane: the full width less the hidden stretches.
     public func cameraBars(_ camera: CameraTrack) -> [CGRect] {
         var bars: [CGRect] = []
@@ -88,7 +97,14 @@ nonisolated public struct TimelineLayout: Sendable {
     }
 
     public func hit(_ p: CGPoint, zooms: [Zoom], trim: ClosedRange<Double>? = nil, camera: CameraTrack? = nil,
-                    captions: [Caption] = []) -> TimelineHit {
+                    captions: [Caption] = [], speeds: [SpeedRegion] = []) -> TimelineHit {
+        if p.y >= Self.speedLane.minY, p.y <= Self.speedLane.maxY {
+            for region in speeds {
+                let r = speedRect(for: region)
+                if let part = part(p.x, r.minX, r.maxX) { return .speed(region.id, part) }
+            }
+            return .emptySpeedLane(t(for: p.x))
+        }
         if p.y >= Self.cameraLane.minY, p.y <= Self.cameraLane.maxY {
             guard let camera else { return .none }
             for (i, gap) in camera.hidden.enumerated() {
@@ -132,6 +148,15 @@ nonisolated public enum TimelineAccessibility {
 }
 
 extension TimelineAccessibility {
+    /// "Cut 1 of 2, 0:03.0 to 0:05.0" or "4 times faster 1 of 2, ...".
+    public static func label(_ region: SpeedRegion, index: Int, count: Int) -> String {
+        let what = switch region.speed {
+        case .cut: "Cut"
+        case .fast(let rate): "\(Int(rate)) times faster"
+        }
+        return "\(what) \(index + 1) of \(count), \(TimeText.clock(region.start)) to \(TimeText.clock(region.end))"
+    }
+
     /// "Caption 4 of 10, 0:11.4 to 0:14.6, Each tile has its own quick actions."
     public static func label(_ caption: Caption, index: Int, count: Int) -> String {
         "Caption \(index + 1) of \(count), \(TimeText.clock(caption.start)) to \(TimeText.clock(caption.end)), "
@@ -141,7 +166,7 @@ extension TimelineAccessibility {
 
 nonisolated public enum TimelineHint {
     public static func text(clicks: Int, zooms: Int) -> String {
-        let add = "Press Z to add a zoom at the playhead."
+        let add = "Press Z to add a zoom, X to cut 2 seconds."
         guard clicks > 0 else { return "No clicks in this take. " + add }
         return "\(clicks) \(clicks == 1 ? "click" : "clicks") became \(zooms) \(zooms == 1 ? "zoom" : "zooms"). "
             + "Clicks less than 3 s apart share one zoom. " + add

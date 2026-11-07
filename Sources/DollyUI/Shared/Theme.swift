@@ -87,7 +87,7 @@ nonisolated public enum Theme {
         public static let sheetRadius: CGFloat = 16
         public static let inspector: CGFloat = 288
         public static let inspectorRadius: CGFloat = 12
-        public static let timeline: CGFloat = 292
+        public static let timeline: CGFloat = 322
         public static let margin: CGFloat = 16
         public static let controlRadius: CGFloat = 6
         public static let controlHeight: CGFloat = 28

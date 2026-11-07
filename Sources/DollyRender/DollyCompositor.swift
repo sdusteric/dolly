@@ -15,8 +15,8 @@ final class DollyInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
     let composer: FrameComposer
     let camera: CameraPath
     let pointer: PointerPath?
-    /// Composition time 0 is this many seconds into the recording (the trim's start).
-    let recordingOffset: Double
+    /// Composition time to take time, through the trim, cuts and speed-ups.
+    let timeMap: TimeMap
     /// The webcam's track in the composition, and how to draw it.
     let webcam: (trackID: CMPersistentTrackID, track: CameraTrack)?
     let captions: CaptionTrack?
@@ -25,7 +25,7 @@ final class DollyInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
     let renderScale: Double
 
     init(timeRange: CMTimeRange, trackID: CMPersistentTrackID, composer: FrameComposer, camera: CameraPath,
-         pointer: PointerPath?, recordingOffset: Double, webcam: (trackID: CMPersistentTrackID, track: CameraTrack)? = nil,
+         pointer: PointerPath?, timeMap: TimeMap, webcam: (trackID: CMPersistentTrackID, track: CameraTrack)? = nil,
          captions: CaptionTrack? = nil, renderScale: Double = 1) {
         self.timeRange = timeRange
         self.trackID = trackID
@@ -33,7 +33,7 @@ final class DollyInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
         self.composer = composer
         self.camera = camera
         self.pointer = pointer
-        self.recordingOffset = recordingOffset
+        self.timeMap = timeMap
         self.webcam = webcam
         self.captions = captions
         self.renderScale = renderScale
@@ -69,7 +69,7 @@ final class DollyCompositor: NSObject, AVVideoCompositing, @unchecked Sendable {
             request.finish(with: error)
             return
         }
-        let t = request.compositionTime.seconds + instruction.recordingOffset
+        let t = instruction.timeMap.source(at: request.compositionTime.seconds)
         let pointer = instruction.pointer
         let webcam = instruction.webcam.flatMap { $0.track.isVisible(at: t) ? $0 : nil }
         let webcamBuffer = webcam.flatMap { request.sourceReadOnlyPixelBuffer(byTrackID: $0.trackID) }

@@ -98,13 +98,13 @@ public final class ExportSheetModel {
         onExported(urls)
     }
 
-    /// `<clip name>.srt` with the captions inside the trim, timed from the trim start.
+    /// `<clip name>.srt` with the captions that play in the clip, timed as the clip plays them.
     private func writeSRT(beside url: URL) throws {
         let take = editor.take
-        guard let captions = take.captions, captions.saveSRT else { return }
-        let items = captions.items.filter { $0.start < take.trim.upperBound && !$0.text.isEmpty }
-        guard !items.isEmpty else { return }
-        try SRT.text(items, trimStart: take.trim.lowerBound)
+        guard take.captions?.saveSRT == true else { return }
+        let text = SRT.text(for: take)
+        guard !text.isEmpty else { return }
+        try text
             .write(to: url.deletingPathExtension().appendingPathExtension("srt"), atomically: true, encoding: .utf8)
     }
 
@@ -257,7 +257,7 @@ public struct ExportSheet: View {
                     .font(Theme.Font.body).foregroundStyle(Theme.muted.color).lineLimit(1).truncationMode(.middle)
                 Button("Change…", action: chooseFolder).buttonStyle(DollyButtonStyle())
             }
-            Text(PlatformLimits.lengthLine(model.editor.take.trim.upperBound - model.editor.take.trim.lowerBound))
+            Text(PlatformLimits.lengthLine(model.editor.take.outputDuration))
                 .font(Theme.Font.body).monospacedDigit().foregroundStyle(Theme.muted.color)
         }
         .disabled(isExporting)

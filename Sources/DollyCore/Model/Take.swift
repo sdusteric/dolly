@@ -54,6 +54,8 @@ public struct Take: Codable, Hashable, Identifiable, Sendable {
     public var captions: CaptionTrack?
     /// `audio.m4a` time 0 is this many seconds into the take; nil when no microphone was recorded.
     public var microphoneOffset: Double?
+    /// Cuts and speed-ups; read and write `speedRegions`.
+    public var speeds: [SpeedRegion]?
 
     public var currentShape: ShapePreset { shape ?? .wide16x9 }
 

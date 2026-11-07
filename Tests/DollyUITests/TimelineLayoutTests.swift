@@ -59,8 +59,8 @@ import Testing
     }
 
     @Test func hintCountsClicksAndZooms() {
-        #expect(TimelineHint.text(clicks: 9, zooms: 5) == "9 clicks became 5 zooms. Clicks less than 3 s apart share one zoom. Press Z to add a zoom at the playhead.")
-        #expect(TimelineHint.text(clicks: 0, zooms: 0) == "No clicks in this take. Press Z to add a zoom at the playhead.")
+        #expect(TimelineHint.text(clicks: 9, zooms: 5) == "9 clicks became 5 zooms. Clicks less than 3 s apart share one zoom. Press Z to add a zoom, X to cut 2 seconds.")
+        #expect(TimelineHint.text(clicks: 0, zooms: 0) == "No clicks in this take. Press Z to add a zoom, X to cut 2 seconds.")
         #expect(TimelineHint.text(clicks: 1, zooms: 1).hasPrefix("1 click became 1 zoom."))
     }
 }
@@ -121,5 +121,25 @@ import Testing
         #expect(Filmstrip.index(at: 40, duration: 40, count: 4) == 3)
         #expect(Filmstrip.index(at: 99, duration: 40, count: 4) == 3)
         #expect(Filmstrip.index(at: 5, duration: 0, count: 4) == 0)
+    }
+
+    /// The Speed lane: regions by edge and body, the empty lane by time, below the video lane.
+    @Test func speedLaneHits() {
+        let layout = TimelineLayout(width: 1000, duration: 50)
+        let region = SpeedRegion(start: 10, end: 20, speed: .cut)
+        let r = layout.speedRect(for: region)
+        let y = TimelineLayout.speedLane.midY
+        #expect(TimelineLayout.speedLane.minY > TimelineLayout.videoLane.maxY && TimelineLayout.zoomLane.minY > TimelineLayout.speedLane.maxY)
+        #expect(layout.hit(CGPoint(x: r.minX + 2, y: y), zooms: [], speeds: [region]) == .speed(region.id, .startEdge))
+        #expect(layout.hit(CGPoint(x: r.midX, y: y), zooms: [], speeds: [region]) == .speed(region.id, .body))
+        guard case .emptySpeedLane(let t) = layout.hit(CGPoint(x: layout.x(for: 30), y: y), zooms: [], speeds: [region]) else {
+            Issue.record("not the empty lane"); return
+        }
+        #expect(abs(t - 30) < 0.1)
+    }
+
+    @Test func xAddsACut() {
+        #expect(TimelineInput.action(key: "x", shift: false, command: false) == .addCut)
+        #expect(TimelineInput.action(key: "x", shift: false, command: true) == nil)
     }
 }

@@ -56,8 +56,7 @@ public enum DollyctlCommands {
 
     /// The take's captions as the .srt an export would write, or nothing when it has none.
     public static func captionsSRT(_ take: Take) -> String {
-        let items = (take.captions?.items ?? []).filter { $0.start < take.trim.upperBound && !$0.text.isEmpty }
-        return items.isEmpty ? "" : SRT.text(items, trimStart: take.trim.lowerBound)
+        SRT.text(for: take)
     }
 
     private static func one(_ v: Double) -> String { String(format: "%.1f", v) }

@@ -90,7 +90,7 @@ extension EditorController {
             let newest = await Task.detached { Self.newestExport(in: store.list()) }.value
             guard number == shelfNumber else { return }
             let latest = newest.map { item in
-                ShelfLatest(title: item.take.name, lengthSeconds: item.take.trim.upperBound - item.take.trim.lowerBound,
+                ShelfLatest(title: item.take.name, lengthSeconds: item.take.outputDuration,
                             exportedShapes: Array(Set(item.take.exports.map(\.shape.label))).sorted(), exportedAt: item.date)
             }
             do {

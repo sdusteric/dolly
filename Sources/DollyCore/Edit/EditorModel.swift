@@ -8,7 +8,7 @@ import Observation
 public final class EditorModel {
     public enum Edge: Sendable { case start, end }
     /// What the stage, the timeline and the inspector have selected.
-    public enum Selection: Hashable, Sendable { case zoom(Zoom.ID), caption(Caption.ID), camera }
+    public enum Selection: Hashable, Sendable { case zoom(Zoom.ID), caption(Caption.ID), camera, speed(SpeedRegion.ID) }
 
     public static let minGap = 0.2
     public static let depthRange = 1.0...3.0
@@ -369,6 +369,15 @@ public final class EditorModel {
     private func set(_ next: Take) {
         let old = take.look
         take = next
+        // Undo can take away what is selected.
+        let selected: Bool = switch selection {
+        case .zoom(let id): next.zooms.contains { $0.id == id }
+        case .caption(let id): next.captions?.items.contains { $0.id == id } ?? false
+        case .speed(let id): next.speedRegions.contains { $0.id == id }
+        case .camera: next.camera != nil
+        case nil: true
+        }
+        if !selected { selection = nil }
         if let pointer, old.smoothPointer != next.look.smoothPointer || old.hideWhenStill != next.look.hideWhenStill {
             self.pointer = pointer.with(look: next.look)
         }
@@ -384,7 +393,7 @@ public final class EditorModel {
         CGPoint(x: min(max(p.x, 0), take.size.width), y: min(max(p.y, 0), take.size.height))
     }
 
-    private func change(_ body: (inout Take) -> Void) {
+    func change(_ body: (inout Take) -> Void) {
         var next = take
         body(&next)
         guard next != take else { return }

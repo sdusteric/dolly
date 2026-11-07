@@ -20,6 +20,7 @@ public struct TimelineView: View {
         var hit: TimelineHit
         var zoom: Zoom?
         var caption: Caption?
+        var speed: SpeedRegion?
         var moved = false
     }
 
@@ -41,10 +42,17 @@ public struct TimelineView: View {
                 }
                 .frame(height: TimelineLayout.height)
             }
-            Text(TimelineHint.text(clicks: clickTimes.count, zooms: editor.take.zooms.count))
-                .font(Theme.Font.meta)
-                .monospacedDigit()
-                .foregroundStyle(Theme.muted.color)
+            Group {
+                if let id = editor.selectedSpeed, let region = editor.speedRegion(id) {
+                    SpeedBar(editor: editor, region: region)
+                } else {
+                    Text(TimelineHint.text(clicks: clickTimes.count, zooms: editor.take.zooms.count))
+                        .font(Theme.Font.meta)
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.muted.color)
+                }
+            }
+            .frame(height: SpeedBar.height, alignment: .leading)
         }
         .focusable()
         .focusEffectDisabled()
@@ -67,7 +75,7 @@ public struct TimelineView: View {
             .accessibilityLabel(isPlaying ? "Pause" : "Play")
             PlayClock(editor: editor)
             Spacer()
-            Text(PlatformLimits.lengthLine(editor.take.trim.upperBound - editor.take.trim.lowerBound))
+            Text(PlatformLimits.lengthLine(editor.take.outputDuration))
                 .font(Theme.Font.body)
                 .monospacedDigit()
                 .foregroundStyle(Theme.muted.color)
@@ -77,7 +85,7 @@ public struct TimelineView: View {
 
     private var laneNames: some View {
         ZStack(alignment: .topLeading) {
-            ForEach([("Video", TimelineLayout.videoLane), ("Zoom", TimelineLayout.zoomLane), ("Camera", TimelineLayout.cameraLane),
+            ForEach([("Video", TimelineLayout.videoLane), ("Speed", TimelineLayout.speedLane), ("Zoom", TimelineLayout.zoomLane), ("Camera", TimelineLayout.cameraLane),
                      ("Captions", TimelineLayout.captionLane), ("Clicks", TimelineLayout.clickLane)], id: \.0) { name, lane in
                 Text(name).font(Theme.Font.meta).foregroundStyle(Theme.muted.color)
                     .offset(y: lane.minY + (name == "Zoom" ? 8 : lane.height / 2 - 8))
@@ -95,12 +103,23 @@ public struct TimelineView: View {
                 strip(zoom, index: index, layout: layout)
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.97)))
             }
+            let speeds = editor.take.speedRegions
+            ForEach(Array(speeds.enumerated()), id: \.element.id) { index, region in
+                speedView(region, index: index, count: speeds.count, layout: layout)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.97)))
+            }
             let captions = editor.take.captions?.items ?? []
             ForEach(Array(captions.enumerated()), id: \.element.id) { index, caption in
                 chip(caption, index: index, count: captions.count, layout: layout)
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.97)))
             }
-            if let ghost, let hit = drag?.hit {
+            if let ghost, let hit = drag?.hit, case .emptySpeedLane = hit {
+                let lane = TimelineLayout.speedLane
+                RoundedRectangle(cornerRadius: 4).fill(Theme.control.color.opacity(0.7))
+                    .frame(width: max(layout.x(for: ghost.upperBound - ghost.lowerBound), 1), height: lane.height - 2 * TimelineLayout.laneInset)
+                    .offset(x: layout.x(for: ghost.lowerBound), y: lane.minY + TimelineLayout.laneInset)
+                    .allowsHitTesting(false)
+            } else if let ghost, let hit = drag?.hit {
                 let camera = { if case .cameraBar = hit { true } else { false } }()
                 let lane = camera ? TimelineLayout.cameraLane : TimelineLayout.zoomLane
                 Rectangle().fill(camera ? Theme.scrim.color : Theme.tape.color.opacity(0.5))
@@ -114,13 +133,14 @@ public struct TimelineView: View {
         .coordinateSpace(.named("lanes"))
         .animation(.easeOut(duration: Theme.Motion.stripBridge), value: editor.take.zooms.map(\.id))
         .animation(.easeOut(duration: Theme.Motion.stripBridge), value: editor.take.captions?.items.map(\.id))
+        .animation(.easeOut(duration: Theme.Motion.stripBridge), value: editor.take.speedRegions.map(\.id))
         .onContinuousHover(coordinateSpace: .named("lanes")) { phase in
             guard case .active(let p) = phase else { NSCursor.arrow.set(); return }
             switch layout.hit(p, zooms: editor.take.zooms, trim: editor.take.trim, camera: editor.take.camera,
-                              captions: editor.take.captions?.items ?? []) {
+                              captions: editor.take.captions?.items ?? [], speeds: editor.take.speedRegions) {
             case .strip(_, .startEdge), .strip(_, .endEdge), .trim, .cameraGap(_, .startEdge), .cameraGap(_, .endEdge),
-                 .caption(_, .startEdge), .caption(_, .endEdge): NSCursor.resizeLeftRight.set()
-            case .strip(_, .body), .caption(_, .body): NSCursor.openHand.set()
+                 .caption(_, .startEdge), .caption(_, .endEdge), .speed(_, .startEdge), .speed(_, .endEdge): NSCursor.resizeLeftRight.set()
+            case .strip(_, .body), .caption(_, .body), .speed(_, .body): NSCursor.openHand.set()
             default: NSCursor.arrow.set()
             }
         }
@@ -155,6 +175,13 @@ public struct TimelineView: View {
         context.fill(Path(CGRect(x: end, y: videoRect.minY, width: size.width - end, height: videoRect.height)), with: .color(.black.opacity(0.45)))
         context.fill(Path(roundedRect: CGRect(x: start, y: videoRect.minY, width: 10, height: videoRect.height), cornerRadius: 3), with: .color(ink))
         context.fill(Path(roundedRect: CGRect(x: end - 10, y: videoRect.minY, width: 10, height: videoRect.height), cornerRadius: 3), with: .color(ink))
+        // Cut stretches are shaded like the trimmed ends: they are not in the clip.
+        for region in editor.take.speedRegions where region.speed == .cut {
+            let x0 = layout.x(for: region.start), x1 = layout.x(for: region.end)
+            context.fill(Path(CGRect(x: x0, y: videoRect.minY, width: x1 - x0, height: videoRect.height)), with: .color(.black.opacity(0.45)))
+        }
+        let speedLane = CGRect(x: 0, y: TimelineLayout.speedLane.minY, width: size.width, height: TimelineLayout.speedLane.height)
+        context.fill(Path(roundedRect: speedLane, cornerRadius: Theme.Size.controlRadius), with: .color(raised))
         let zoomLane = CGRect(x: 0, y: TimelineLayout.zoomLane.minY, width: size.width, height: TimelineLayout.zoomLane.height)
         context.fill(Path(roundedRect: zoomLane, cornerRadius: Theme.Size.controlRadius), with: .color(raised))
         if let camera = editor.take.camera {
@@ -249,6 +276,62 @@ public struct TimelineView: View {
             .accessibilityAction(named: "Remove") { editor.removeCaption(caption.id) }
     }
 
+    /// One cut or speed-up on the Speed lane: a cut in the control tone, a speed-up in ink.
+    private func speedView(_ region: SpeedRegion, index: Int, count: Int, layout: TimelineLayout) -> some View {
+        let frame = layout.speedRect(for: region)
+        let selected = editor.selectedSpeed == region.id
+        let cut = region.speed == .cut
+        let shape = RoundedRectangle(cornerRadius: 4)
+        return Text(region.speed.label)
+            .font(Theme.Font.meta.weight(.medium))
+            .monospacedDigit()
+            .foregroundStyle(cut ? Theme.ink.color : Theme.onPrimary.color)
+            .lineLimit(1)
+            .opacity(frame.width >= 32 ? 1 : 0)
+            .padding(.horizontal, 6)
+            .frame(width: frame.width, height: frame.height, alignment: .leading)
+            .background(shape.fill(cut ? Theme.control.color : Theme.primary.color))
+            .overlay {
+                if selected { RoundedRectangle(cornerRadius: 6).strokeBorder(Theme.ink.color, lineWidth: 2).padding(-3) }
+            }
+            .contentShape(Rectangle())
+            .offset(x: frame.minX, y: frame.minY)
+            .gesture(speedGesture(region, layout: layout))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(TimelineAccessibility.label(region, index: index, count: count))
+            .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
+            .accessibilityAction { editor.selection = .speed(region.id) }
+            .accessibilityAction(named: "Move earlier") { editor.moveSpeed(region.id, by: -0.1) }
+            .accessibilityAction(named: "Move later") { editor.moveSpeed(region.id, by: 0.1) }
+            .accessibilityAction(named: "Remove") { editor.removeSpeed(region.id) }
+    }
+
+    private func speedGesture(_ region: SpeedRegion, layout: TimelineLayout) -> some Gesture {
+        DragGesture(minimumDistance: 0, coordinateSpace: .named("lanes"))
+            .onChanged { value in
+                if drag == nil {
+                    drag = DragState(hit: layout.hit(value.startLocation, zooms: [], speeds: [region]), speed: region)
+                    editor.selection = .speed(region.id)
+                    editor.beginGesture()
+                }
+                guard var state = drag, let start = state.speed else { return }
+                guard abs(value.translation.width) >= 1 || state.moved else { return }
+                state.moved = true
+                drag = state
+                switch state.hit {
+                case .speed(_, .startEdge): editor.resizeSpeed(region.id, edge: .start, to: layout.t(for: value.location.x))
+                case .speed(_, .endEdge): editor.resizeSpeed(region.id, edge: .end, to: layout.t(for: value.location.x))
+                default:
+                    let target = start.start + layout.t(for: abs(value.translation.width)) * (value.translation.width < 0 ? -1 : 1)
+                    editor.moveSpeed(region.id, by: target - (editor.speedRegion(region.id)?.start ?? start.start))
+                }
+            }
+            .onEnded { _ in
+                editor.endGesture()
+                drag = nil
+            }
+    }
+
     private func chipGesture(_ caption: Caption, layout: TimelineLayout) -> some Gesture {
         DragGesture(minimumDistance: 0, coordinateSpace: .named("lanes"))
             .onChanged { value in
@@ -307,7 +390,8 @@ public struct TimelineView: View {
                 .onChanged { value in
                     if drag == nil {
                         drag = DragState(hit: layout.hit(value.startLocation, zooms: editor.take.zooms, trim: editor.take.trim,
-                                                         camera: editor.take.camera, captions: editor.take.captions?.items ?? []))
+                                                         camera: editor.take.camera, captions: editor.take.captions?.items ?? [],
+                                                         speeds: editor.take.speedRegions))
                         switch drag?.hit {
                         case .trim, .cameraGap(_, .startEdge), .cameraGap(_, .endEdge): editor.beginGesture()
                         default: break
@@ -317,7 +401,8 @@ public struct TimelineView: View {
                     if abs(value.translation.width) > 4 { drag?.moved = true }
                     switch drag?.hit {
                     case .ruler: editor.playhead = t
-                    case .emptyZoomLane(let t0), .cameraBar(let t0): if abs(value.translation.width) > 4 { ghost = min(t0, t)...max(t0, t) }
+                    case .emptyZoomLane(let t0), .cameraBar(let t0), .emptySpeedLane(let t0):
+                        if abs(value.translation.width) > 4 { ghost = min(t0, t)...max(t0, t) }
                     case .cameraGap(let i, .startEdge): editor.resizeCameraGap(index: i, edge: .start, to: t)
                     case .cameraGap(let i, .endEdge): editor.resizeCameraGap(index: i, edge: .end, to: t)
                     case .trim(.start): editor.setTrim(min(t, editor.take.trim.upperBound - 1)...editor.take.trim.upperBound)
@@ -329,6 +414,12 @@ public struct TimelineView: View {
                     switch drag?.hit {
                     case .emptyZoomLane(let t0):
                         if let ghost { editor.addZoom(from: ghost.lowerBound, to: ghost.upperBound) } else {
+                            editor.select(nil)
+                            editor.playhead = t0
+                        }
+                    case .emptySpeedLane(let t0):
+                        if let ghost { editor.addSpeed(from: t0 == ghost.lowerBound ? ghost.lowerBound : ghost.upperBound,
+                                                       to: t0 == ghost.lowerBound ? ghost.upperBound : ghost.lowerBound, speed: .cut) } else {
                             editor.select(nil)
                             editor.playhead = t0
                         }
@@ -354,9 +445,10 @@ private struct PlayClock: View {
     let editor: EditorModel
 
     var body: some View {
+        let map = editor.take.timeMap
         HStack(spacing: 0) {
-            Text(TimeText.clock(editor.playhead)).foregroundStyle(Theme.ink.color)
-            Text(" / \(TimeText.clock(editor.take.trim.upperBound - editor.take.trim.lowerBound))").foregroundStyle(Theme.muted.color)
+            Text(TimeText.clock(map.output(at: editor.playhead))).foregroundStyle(Theme.ink.color)
+            Text(" / \(TimeText.clock(map.duration))").foregroundStyle(Theme.muted.color)
         }
         .font(.system(size: 15, weight: .medium))
         .monospacedDigit()
@@ -374,5 +466,34 @@ private struct PlayheadMark: View {
         }
         .offset(x: layout.x(for: editor.playhead) - 6, y: -4)
         .allowsHitTesting(false)
+    }
+}
+
+/// Under the timeline while a cut or speed-up is selected: what it does, its speed, Remove.
+private struct SpeedBar: View {
+    static let height: CGFloat = 30
+    let editor: EditorModel
+    let region: SpeedRegion
+
+    var body: some View {
+        HStack(spacing: 12) {
+            StudioSegmented(SpeedRegion.Speed.choices, selected: region.speed, label: \.label) { editor.setSpeed(region.id, $0) }
+                .fixedSize()
+            Text(SpeedBar.summary(region))
+                .font(Theme.Font.meta)
+                .monospacedDigit()
+                .foregroundStyle(Theme.muted.color)
+            Spacer(minLength: 0)
+            Button("Remove") { editor.removeSpeed(region.id) }.buttonStyle(DollyButtonStyle())
+        }
+    }
+
+    /// "Removes 2.0 s" or "Plays 4.0 s in 1.0 s".
+    nonisolated static func summary(_ region: SpeedRegion) -> String {
+        let length = String(format: "%.1f s", region.length)
+        return switch region.speed {
+        case .cut: "Removes \(length)"
+        case .fast(let rate): "Plays \(length) in " + String(format: "%.1f s", region.length / rate)
+        }
     }
 }
