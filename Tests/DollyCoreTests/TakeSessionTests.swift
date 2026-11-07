@@ -54,6 +54,38 @@ import Testing
 
     /// Review finding 5: a take whose picture is gone opens with the default color, so the Look tab
     /// shows what the clip shows.
+    /// A take trashed in Finder while open: saving never brings its folder back, and the next take
+    /// still opens.
+    @Test func trashedFolderIsNotRecreated() throws {
+        let (store, folderA, folderB) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: store.paths.takesFolder.deletingLastPathComponent()) }
+        let session = TakeSession(store: store)
+        let a = try session.open(folder: folderA)
+        a.renameTake("A edited")
+        try FileManager.default.removeItem(at: folderA)
+        #expect(throws: TakeStore.FolderGone.self) { try session.save() }
+        #expect(!FileManager.default.fileExists(atPath: folderA.path(percentEncoded: false)))
+        #expect(try session.open(folder: folderB).take.name == "B")
+        #expect(!FileManager.default.fileExists(atPath: folderA.path(percentEncoded: false)))
+    }
+
+    /// A save that fails for another reason (a full disk) keeps the edited take open, unless the
+    /// owner chooses to discard its edits.
+    @Test func failedSaveKeepsTheTakeOpenUntilDiscarded() throws {
+        let (store, folderA, folderB) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: store.paths.takesFolder.deletingLastPathComponent()) }
+        let session = TakeSession(store: store)
+        let a = try session.open(folder: folderA)
+        a.renameTake("A edited")
+        // A directory where take.json goes makes the rename fail, as a full disk would make the write fail.
+        let json = folderA.appending(path: TakeStore.jsonName)
+        try FileManager.default.removeItem(at: json)
+        try FileManager.default.createDirectory(at: json.appending(path: "x"), withIntermediateDirectories: true)
+        #expect(throws: TakeSession.SaveFailed.self) { try session.open(folder: folderB) }
+        #expect(session.folder == folderA && session.editor === a)
+        #expect(try session.open(folder: folderB, discardingEdits: true).take.name == "B")
+    }
+
     @Test func missingPictureOpensAsDefaultColor() throws {
         let home = FileManager.default.temporaryDirectory.appending(path: "dolly-session-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: home) }

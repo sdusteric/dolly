@@ -31,6 +31,8 @@ final class EditorController: NSObject, NSWindowDelegate {
     private var reloadNumber = 0
     var shelfNumber = 0
     weak var exportModel: ExportSheetModel?
+    /// A failed save alerts once; the next good save clears it.
+    private var saveFailureShown = false
 
     init(paths: DollyPaths, settings: DollyCore.Settings, log: Log) {
         self.paths = paths
@@ -291,14 +293,19 @@ final class EditorController: NSObject, NSWindowDelegate {
         if export { showExport() }
     }
 
-    /// Reads the take from disk (TakeSession), so reopening one keeps its saved edits.
-    private func open(folder: URL) {
+    /// Reads the take from disk (TakeSession), so reopening one keeps its saved edits. When the
+    /// open take's edits cannot be saved, the owner keeps editing it or discards them and switches.
+    private func open(folder: URL, discardingEdits: Bool = false) {
         saveTask?.cancel()
         saveTask = nil
         preview.pause()
         let editor: EditorModel
         do {
-            editor = try session.open(folder: folder)
+            editor = try session.open(folder: folder, discardingEdits: discardingEdits)
+        } catch let failure as TakeSession.SaveFailed {
+            log.error("saving take failed: \(failure.underlying.localizedDescription)")
+            alertSaveFailed(failure.underlying, discard: { [weak self] in self?.open(folder: folder, discardingEdits: true) })
+            return
         } catch {
             log.error("opening take \(folder.lastPathComponent) failed: \(error.localizedDescription)")
             refreshTakes()
@@ -383,10 +390,39 @@ final class EditorController: NSObject, NSWindowDelegate {
         saveTask = nil
         do {
             try session.save()
+            saveFailureShown = false
+        } catch is TakeStore.FolderGone {
+            // Trashed in Finder while open: let it go rather than write it back.
+            log.warning("the open take's folder is gone; closing it")
+            session.close()
+            filmstripTask?.cancel()
+            screen.editor = nil
+            preview.unload()
+            refreshTakes()
+            return
         } catch {
             log.error("saving take failed: \(error.localizedDescription)")
+            if !saveFailureShown {
+                saveFailureShown = true
+                alertSaveFailed(error, discard: nil)
+            }
         }
         refreshOpenEntry()
+    }
+
+    /// A sheet on the editor: the edits are still open and Dolly saves again on the next change.
+    /// With `discard`, the owner can drop the edits and go on to the other take.
+    private func alertSaveFailed(_ error: any Error, discard: (() -> Void)?) {
+        guard let window, window.attachedSheet == nil else { return NSSound.beep() }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Couldn't save this take"
+        alert.informativeText = "\(error.localizedDescription) Your edits are still open, and Dolly saves again after your next change."
+        alert.addButton(withTitle: "Keep editing")
+        if discard != nil { alert.addButton(withTitle: "Discard edits") }
+        alert.beginSheetModal(for: window) { response in
+            if response == .alertSecondButtonReturn { discard?() }
+        }
     }
 
     private func save(_ take: Take) {

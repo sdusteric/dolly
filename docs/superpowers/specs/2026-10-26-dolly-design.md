@@ -184,6 +184,9 @@ Always below: **Look**: Background (five flat colors plus a picture of the owner
 - First Record without Screen Recording permission: Snap's first-run pattern (a window that says why, one button that asks macOS, then a hint if it stays denied).
 - Take with no clicks: the Zoom lane shows "No clicks in this take. Press Z to add a zoom at the playhead."
 - A take whose files are missing or unreadable: the sidebar row says "Can't open this take" with Show in Finder.
+- A save that fails (a full disk): a sheet says "Couldn't save this take" with the reason, once until a save works again; the edits stay open. Switching takes while it fails offers Keep editing or Discard edits.
+- The open take trashed in Finder: Dolly closes it and never writes its folder back.
+- Quit during a stop waits for the take to save; quit during an export cancels it and removes its scratch folder, and launch sweeps any left by a crash.
 
 ## 7. Export
 

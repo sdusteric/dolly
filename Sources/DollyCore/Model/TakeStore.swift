@@ -44,9 +44,16 @@ public final class TakeStore: Sendable {
         return try Self.decoder.decode(Take.self, from: data)
     }
 
+    /// The take's folder is gone (trashed in Finder while it was open); saving never recreates it.
+    public struct FolderGone: Error, Sendable, Hashable {}
+
     public func save(_ take: Take) throws {
+        let folder = folder(for: take.id)
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: folder.path(percentEncoded: false), isDirectory: &isDirectory),
+              isDirectory.boolValue else { throw FolderGone() }
         let data = try Self.encoder.encode(take)
-        try AtomicFile.write(data, to: folder(for: take.id).appending(path: Self.jsonName))
+        try AtomicFile.write(data, to: folder.appending(path: Self.jsonName))
     }
 
     /// Every take folder, newest first. Never throws: a folder that cannot be read is listed as

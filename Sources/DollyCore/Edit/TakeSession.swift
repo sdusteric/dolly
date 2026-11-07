@@ -11,10 +11,24 @@ public final class TakeSession {
         self.store = store
     }
 
-    /// Saves the open take, then opens the one in `folder`.
+    /// The open take's edits could not be saved, so it stays open; `underlying` says why.
+    public struct SaveFailed: Error {
+        public let underlying: any Error
+    }
+
+    /// Saves the open take, then opens the one in `folder`. A take whose folder is gone has nothing
+    /// to save; any other failed save throws `SaveFailed` and keeps it open, unless
+    /// `discardingEdits`.
     @discardableResult
-    public func open(folder: URL) throws -> EditorModel {
-        try save()
+    public func open(folder: URL, discardingEdits: Bool = false) throws -> EditorModel {
+        if !discardingEdits {
+            do {
+                try save()
+            } catch is TakeStore.FolderGone {
+            } catch {
+                throw SaveFailed(underlying: error)
+            }
+        }
         var take = try store.load(folder)
         // A picture that is gone draws the default color; the editor shows that too.
         take.look = take.look.resolved(in: folder)
