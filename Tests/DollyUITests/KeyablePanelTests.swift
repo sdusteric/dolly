@@ -18,3 +18,15 @@ import Testing
         #expect(panel.level == .floating)
     }
 }
+
+@MainActor @Suite struct SheetWindowTests {
+    /// Esc on a sheet reaches the window as cancelOperation, whatever the SwiftUI buttons do.
+    /// Built here, never shown.
+    @Test func escapeRunsTheCancelHandler() {
+        let sheet = SheetWindow(contentRect: .zero, styleMask: [.titled], backing: .buffered, defer: true)
+        var cancels = 0
+        sheet.onCancel = { cancels += 1 }
+        sheet.cancelOperation(nil)
+        #expect(cancels == 1)
+    }
+}

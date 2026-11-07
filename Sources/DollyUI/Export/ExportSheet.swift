@@ -108,6 +108,11 @@ public final class ExportSheetModel {
     }
 
     public func cancel() { job?.cancel() }
+
+    /// Esc: stops a running export and keeps the sheet; otherwise closes it.
+    public func escape(close: () -> Void) {
+        if case .exporting = state { cancel() } else { close() }
+    }
 }
 
 /// The sheet (spec 7): every shape as a plate with the frame at the playhead, quality, folder, the

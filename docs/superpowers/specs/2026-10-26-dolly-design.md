@@ -182,6 +182,7 @@ Always below: **Look**: Background (five flat colors plus a picture of the owner
 - Sizes: 16:9 1920 × 1080, 1:1 1080 × 1080, 4:5 1080 × 1350, 9:16 1080 × 1920. H.264 High profile, AAC 48 kHz when there is audio, `+faststart` (moov atom first) so uploads start fast. Bit rate about 12 Mbit/s at 1080p60 **(my call)**; a 48 s clip is about 70 MB.
 - Rendering: an `AVVideoCompositing` compositor (Core Image on Metal) that draws background, rounded recording with shadow, the camera transform and the pointer, used by both the preview player and `AVAssetWriter` export. The preview renders at twice the export canvas on a Retina screen (same picture, more pixels), so a zoom shows the recording's own Retina detail instead of a stretched 1080p frame; the pointer, ring and caption bitmaps are drawn at that density too. Export runs in the background with a progress bar per shape in the sheet and in the toolbar; the editor stays usable.
 - Done: "Saved 2 files" with Copy (puts the file URLs on the pasteboard so a browser upload field accepts a paste) and Show in Finder. File names: `<take name> 16x9.mp4`.
+- Esc closes the sheet. While an export runs, Esc stops it and the sheet stays open.
 - Platform limits (length, file size, resolution, fps) are checked before export with plain warnings and never block: the owner may have a paid tier.
 
 ## 8. Files and data

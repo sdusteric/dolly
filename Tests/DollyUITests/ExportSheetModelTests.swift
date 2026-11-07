@@ -60,6 +60,29 @@ final class FakeExporter: ExportRunning, @unchecked Sendable {
         #expect(editor.take.exports.isEmpty)
     }
 
+    @Test func escapeClosesWhenNotExporting() async {
+        let (sheet, _) = model(FakeExporter())
+        var closes = 0
+        sheet.escape { closes += 1 }
+        #expect(closes == 1)
+        await sheet.export()
+        sheet.escape { closes += 1 }
+        #expect(closes == 2)
+    }
+
+    @Test func escapeStopsARunningExportAndKeepsTheSheet() async {
+        let fake = FakeExporter()
+        fake.waits = true
+        let (sheet, _) = model(fake)
+        let job = Task { await sheet.export() }
+        try? await Task.sleep(for: .milliseconds(30))
+        var closes = 0
+        sheet.escape { closes += 1 }
+        await job.value
+        #expect(closes == 0)
+        #expect(sheet.state == .ready)
+    }
+
     @Test func failureSaysWhy() async {
         let fake = FakeExporter()
         fake.fails = true

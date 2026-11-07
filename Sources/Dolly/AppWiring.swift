@@ -476,7 +476,7 @@ final class EditorController: NSObject, NSWindowDelegate {
             if let fps = model?.fps, fps != self?.settings.exportFPS { self?.setExportFPS(fps) }
             self?.exported()
         }
-        let sheet = NSWindow(contentRect: .zero, styleMask: [.titled], backing: .buffered, defer: false)
+        let sheet = SheetWindow(contentRect: .zero, styleMask: [.titled], backing: .buffered, defer: false)
         let view = ExportSheet(
             model: model, posters: posters,
             chooseFolder: { [weak self, weak sheet] in
@@ -489,6 +489,9 @@ final class EditorController: NSObject, NSWindowDelegate {
                 if let sheet { window?.endSheet(sheet) }
             }
         )
+        sheet.onCancel = { [weak window, weak sheet, weak model] in
+            model?.escape { if let sheet { window?.endSheet(sheet) } }
+        }
         sheet.contentView = NSHostingView(rootView: view.focusEffectDisabled())
         sheet.setContentSize(sheet.contentView?.fittingSize ?? CGSize(width: 520, height: 520))
         window.beginSheet(sheet)
