@@ -176,4 +176,27 @@ func bitmap(_ image: CIImage) -> [UInt8] {
             #expect(abs(p.durationSeconds - expected) <= 1.0 / 30 + 0.03, "\(regions.map(\.speed))")
         }
     }
+
+    /// System audio plays with the microphone, or alone; both mix into the one audio track.
+    @Test func systemAudioIsMixedIntoTheExport() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "dolly-system-audio-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let folder = root.appending(path: "take"), out = root.appending(path: "out")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try await SyntheticTake.writeMovie(seconds: 3, fps: 60, variableRate: false, to: folder.appending(path: TakeStore.movieName))
+        try SyntheticTake.writeTone(to: folder.appending(path: TakeStore.systemAudioName), seconds: 3)
+        try SyntheticTake.writeTone(to: folder.appending(path: TakeStore.audioName), seconds: 3)
+        for mic in [false, true] {
+            var take = Take(name: "Sound", target: .display, size: CGSize(width: 1440, height: 900), pixelScale: 1, fps: 60, duration: 3)
+            take.systemAudioOffset = 0.0213
+            take.microphoneOffset = mic ? 0.05 : nil
+            take.speedRegions = [SpeedRegion(start: 1, end: 1.5, speed: .cut)]
+            let built = try await PlayerItemFactory.asset(take: take, folder: folder)
+            #expect(try await built.asset.loadTracks(withMediaType: .audio).count == (mic ? 2 : 1))
+            let url = try await Exporter().export(ExportPlan(take: take, shape: .wide16x9, fps: 30, folder: out), takeFolder: folder,
+                                                  pointer: nil, progress: { _ in })
+            let p = await VideoProbe.probe(url)
+            #expect(p.audioTrackCount == 1 && abs(p.durationSeconds - 2.5) <= 1.0 / 30 + 0.03)
+        }
+    }
 }

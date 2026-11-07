@@ -49,7 +49,7 @@ Toolbar, takes sidebar, the spike-tape timeline, Aim mode with its corners, the 
 
 ## Left out on purpose
 
-FocuSee's icon rail, its effects and its AI tools: the four tabs carry everything Dolly does. No 4:3 shape (X and Threads crop it like 1:1 or 4:5). No system audio in this pass (M3 keeps it). No word-by-word highlight in captions.
+FocuSee's icon rail, its effects and its AI tools: the four tabs carry everything Dolly does. No 4:3 shape (X and Threads crop it like 1:1 or 4:5). No system audio in this pass (built later, first spec 4.2). No word-by-word highlight in captions.
 
 ## Data
 

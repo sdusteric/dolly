@@ -26,9 +26,12 @@ public enum RecordingEvent: Sendable, Hashable {
 public struct RecordingResult: Sendable, Hashable {
     public var duration: Double
     public var startHost: Double
-    public init(duration: Double, startHost: Double) {
+    /// Host time of system.m4a's first sample; nil when no system audio was written.
+    public var systemAudioStart: Double?
+    public init(duration: Double, startHost: Double, systemAudioStart: Double? = nil) {
         self.duration = duration
         self.startHost = startHost
+        self.systemAudioStart = systemAudioStart
     }
 }
 

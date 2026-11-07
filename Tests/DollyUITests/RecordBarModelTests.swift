@@ -121,6 +121,24 @@ import Testing
         #expect(!old.recordCamera)
     }
 
+    @Test func systemAudioSwitchGoesIntoThePlanAndIsRemembered() throws {
+        var plan = try RecordingPlan.make(target: .display, displayID: 1, windowID: nil,
+                                          globalRect: CGRect(x: 0, y: 0, width: 640, height: 400), scale: 1)
+        var m = RecordBarModel()
+        m.apply(to: &plan)
+        #expect(!plan.systemAudio)
+        m.systemAudio = true
+        m.apply(to: &plan)
+        #expect(plan.systemAudio)
+        var settings = DollyCore.Settings()
+        m.store(in: &settings)
+        let back = try JSONDecoder().decode(DollyCore.Settings.self, from: JSONEncoder().encode(settings))
+        var n = RecordBarModel()
+        n.load(from: back)
+        #expect(n.systemAudio)
+        #expect(try !JSONDecoder().decode(DollyCore.Settings.self, from: Data("{}".utf8)).recordSystemAudio)
+    }
+
     @Test func aimHintIsRememberedOnceSeen() throws {
         #expect(try !JSONDecoder().decode(DollyCore.Settings.self, from: Data("{}".utf8)).aimHintSeen)
         var settings = DollyCore.Settings()

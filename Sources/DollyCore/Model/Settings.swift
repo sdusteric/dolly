@@ -31,6 +31,8 @@ public struct Settings: Codable, Hashable, Sendable {
     public var recordMicrophone = false
     public var cameraID: String?
     public var microphoneID: String?
+    /// The Record bar's System audio switch.
+    public var recordSystemAudio = false
     /// The stage's "Drag inside the corners" hint stops showing after the first re-aim.
     public var aimHintSeen = false
 
@@ -48,6 +50,7 @@ public struct Settings: Codable, Hashable, Sendable {
         recordMicrophone = try c.decodeIfPresent(Bool.self, forKey: .recordMicrophone) ?? false
         cameraID = try c.decodeIfPresent(String.self, forKey: .cameraID)
         microphoneID = try c.decodeIfPresent(String.self, forKey: .microphoneID)
+        recordSystemAudio = try c.decodeIfPresent(Bool.self, forKey: .recordSystemAudio) ?? false
         aimHintSeen = try c.decodeIfPresent(Bool.self, forKey: .aimHintSeen) ?? false
     }
 }

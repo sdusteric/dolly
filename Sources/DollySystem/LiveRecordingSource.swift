@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import CoreMedia
 import DollyCore
 import Foundation
@@ -23,11 +24,16 @@ public final class LiveRecordingSource: NSObject, RecordingSource, SCStreamOutpu
         var fps = 60
         /// Seconds from the first frame to the stop request, set by stop() before the writer finishes.
         var end: Double?
+        /// system.m4a, when the plan records system audio. A failure here drops the sound, never the take.
+        var audioWriter: AVAssetWriter?
+        var audioInput: AVAssetWriterInput?
+        var audioFirst: Double?
     }
 
     private let lock = NSLock()
     private var state = State()
     private let queue = DispatchQueue(label: "dev.sdusteric.dolly.capture", qos: .userInitiated)
+    private let audioQueue = DispatchQueue(label: "dev.sdusteric.dolly.capture.audio", qos: .userInitiated)
 
     override public init() { super.init() }
 
@@ -50,6 +56,12 @@ public final class LiveRecordingSource: NSObject, RecordingSource, SCStreamOutpu
         c.colorSpaceName = CGColorSpace.itur_709
         c.colorMatrix = CGDisplayStream.yCbCrMatrix_ITU_R_709_2
         c.captureDynamicRange = .SDR
+        if plan.systemAudio {
+            c.capturesAudio = true
+            c.excludesCurrentProcessAudio = true
+            c.sampleRate = 48_000
+            c.channelCount = 2
+        }
         return c
     }
 
@@ -76,9 +88,14 @@ public final class LiveRecordingSource: NSObject, RecordingSource, SCStreamOutpu
             try await writer.finish(endingAt: lock.withLock { state.end })
         }
         let stream = SCStream(filter: filter, configuration: configuration, delegate: self)
-        lock.withLock { state = State(stream: stream, continuation: continuation, consumer: consumer, events: events, fps: plan.fps) }
+        let sound = plan.systemAudio ? Self.audioWriter(beside: movieURL) : nil
+        lock.withLock {
+            state = State(stream: stream, continuation: continuation, consumer: consumer, events: events, fps: plan.fps,
+                          audioWriter: sound?.writer, audioInput: sound?.input)
+        }
         do {
             try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: queue)
+            if sound != nil { try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: audioQueue) }
             try await stream.startCapture()
         } catch {
             // Nothing was written: end the consumer so neither it nor the writer is left waiting.
@@ -102,11 +119,56 @@ public final class LiveRecordingSource: NSObject, RecordingSource, SCStreamOutpu
             return (first, end)
         }
         continuation?.finish()
+        let audioFirst = await finishAudio()
         try await consumer.value
-        return RecordingResult(duration: end, startHost: first)
+        return RecordingResult(duration: end, startHost: first, systemAudioStart: audioFirst)
+    }
+
+    /// AAC at 48 kHz stereo into system.m4a beside the movie, or nil when the writer cannot start.
+    static func audioWriter(beside movieURL: URL) -> (writer: AVAssetWriter, input: AVAssetWriterInput)? {
+        let url = movieURL.deletingLastPathComponent().appending(path: TakeStore.systemAudioName)
+        try? FileManager.default.removeItem(at: url)
+        guard let writer = try? AVAssetWriter(outputURL: url, fileType: .m4a) else { return nil }
+        let input = AVAssetWriterInput(mediaType: .audio, outputSettings: [
+            AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 48_000, AVNumberOfChannelsKey: 2, AVEncoderBitRateKey: 160_000,
+        ])
+        input.expectsMediaDataInRealTime = true
+        guard writer.canAdd(input) else { return nil }
+        writer.add(input)
+        return (writer, input)
+    }
+
+    /// Closes system.m4a on the audio queue, so no sample lands after `markAsFinished`. Returns the
+    /// host time of its first sample, or nil (and no file) when nothing was written.
+    private func finishAudio() async -> Double? {
+        let writer: AVAssetWriter? = await withCheckedContinuation { done in
+            audioQueue.async { [self] in
+                let (writer, input) = lock.withLock {
+                    defer {
+                        state.audioWriter = nil
+                        state.audioInput = nil
+                    }
+                    return (state.audioWriter, state.audioInput)
+                }
+                guard let writer, let input, writer.status == .writing else {
+                    if let writer { try? FileManager.default.removeItem(at: writer.outputURL) }
+                    return done.resume(returning: nil)
+                }
+                input.markAsFinished()
+                done.resume(returning: writer)
+            }
+        }
+        guard let writer else { return nil }
+        await writer.finishWriting()
+        guard writer.status == .completed else {
+            try? FileManager.default.removeItem(at: writer.outputURL)
+            return nil
+        }
+        return lock.withLock { state.audioFirst }
     }
 
     public func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
+        if type == .audio { return appendAudio(sampleBuffer) }
         guard type == .screen, sampleBuffer.isValid, Self.isComplete(sampleBuffer),
               let image = sampleBuffer.imageBuffer else { return }
         let pts = sampleBuffer.presentationTimeStamp
@@ -120,6 +182,21 @@ public final class LiveRecordingSource: NSObject, RecordingSource, SCStreamOutpu
         // ScreenCaptureKit hands over the buffer; the read-only wrapper keeps it alive for the writer.
         nonisolated(unsafe) let pixels = image
         continuation?.yield(Frame(buffer: CVReadOnlyPixelBuffer(unsafeBuffer: pixels), time: pts - first))
+    }
+
+    /// On `audioQueue`. Sample times are on the host clock, like the screen's.
+    private func appendAudio(_ sampleBuffer: CMSampleBuffer) {
+        guard sampleBuffer.isValid else { return }
+        let (writer, input) = lock.withLock { (state.audioWriter, state.audioInput) }
+        guard let writer, let input else { return }
+        let pts = sampleBuffer.presentationTimeStamp
+        if writer.status == .unknown {
+            guard writer.startWriting() else { return }
+            writer.startSession(atSourceTime: pts)
+            lock.withLock { state.audioFirst = pts.seconds }
+        }
+        guard writer.status == .writing, input.isReadyForMoreMediaData else { return }
+        input.append(sampleBuffer)
     }
 
     public func stream(_ stream: SCStream, didStopWithError error: any Error) {

@@ -18,6 +18,8 @@ nonisolated public struct RecordBarModel: Sendable {
     /// nil is the system's default device.
     public var cameraID: String?
     public var microphoneID: String?
+    /// The sound other apps play; needs no permission beyond Screen Recording.
+    public var systemAudio = false
 
     public init() {}
 
@@ -34,6 +36,7 @@ nonisolated public struct RecordBarModel: Sendable {
     public func apply(to plan: inout RecordingPlan) {
         plan.cameraID = camera ? (cameraID ?? "") : nil
         plan.microphoneID = microphone ? (microphoneID ?? "") : nil
+        plan.systemAudio = systemAudio
     }
 
     public mutating func load(from settings: Settings) {
@@ -41,6 +44,7 @@ nonisolated public struct RecordBarModel: Sendable {
         microphone = settings.recordMicrophone
         cameraID = settings.cameraID
         microphoneID = settings.microphoneID
+        systemAudio = settings.recordSystemAudio
     }
 
     public func store(in settings: inout Settings) {
@@ -48,6 +52,7 @@ nonisolated public struct RecordBarModel: Sendable {
         settings.recordMicrophone = microphone
         settings.cameraID = cameraID
         settings.microphoneID = microphoneID
+        settings.recordSystemAudio = systemAudio
     }
 
     /// Each time the bar opens it picks the window the owner was looking at: the frontmost app's top

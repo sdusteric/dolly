@@ -17,6 +17,16 @@ import Testing
         #expect(c.sourceRect == CGRect(x: 100, y: 200, width: 800, height: 600))
     }
 
+    /// System audio: 48 kHz stereo from other apps, never Dolly's own sounds. Off by default.
+    @Test func systemAudioCapturesOtherAppsOnly() throws {
+        var plan = try RecordingPlan.make(target: .display, displayID: 1, windowID: nil,
+                                          globalRect: CGRect(x: 0, y: 0, width: 1440, height: 900), scale: 1)
+        #expect(!LiveRecordingSource.streamConfiguration(for: plan, displayFrame: plan.globalRect).capturesAudio)
+        plan.systemAudio = true
+        let c = LiveRecordingSource.streamConfiguration(for: plan, displayFrame: plan.globalRect)
+        #expect(c.capturesAudio && c.excludesCurrentProcessAudio && c.sampleRate == 48_000 && c.channelCount == 2)
+    }
+
     @Test func globalFrameFromWindowListFlipsY() {
         let r = PointerSampler.globalFrame(windowListBounds: CGRect(x: 10, y: 50, width: 300, height: 200), mainDisplayHeight: 900)
         #expect(r == CGRect(x: 10, y: 650, width: 300, height: 200))

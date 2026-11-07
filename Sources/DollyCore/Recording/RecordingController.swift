@@ -225,6 +225,10 @@ public final class RecordingController {
             if let first = sideStarts[.camera], FileManager.default.fileExists(atPath: folder.appending(path: Self.cameraFile).path(percentEncoded: false)) {
                 take.camera = CameraTrack(startOffset: first - result.startHost)
             }
+            if let first = result.systemAudioStart,
+               FileManager.default.fileExists(atPath: folder.appending(path: TakeStore.systemAudioName).path(percentEncoded: false)) {
+                take.systemAudioOffset = first - result.startHost
+            }
             if let first = sideStarts[.microphone], FileManager.default.fileExists(atPath: folder.appending(path: TakeStore.audioName).path(percentEncoded: false)) {
                 take.microphoneOffset = first - result.startHost
             }

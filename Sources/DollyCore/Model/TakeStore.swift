@@ -19,6 +19,8 @@ public final class TakeStore: Sendable {
     public static let jsonName = "take.json"
     public static let posterName = "poster.jpg"
     public static let audioName = "audio.m4a"
+    /// The sound other apps played, from ScreenCaptureKit, when System audio was on.
+    public static let systemAudioName = "system.m4a"
     public static let brokenReason = "Can't open this take"
 
     public let paths: DollyPaths

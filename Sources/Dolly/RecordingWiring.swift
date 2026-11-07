@@ -184,6 +184,7 @@ final class RecordingWiring {
         highlight.show(bar.target == .window ? windows.first { $0.id == bar.windowID }?.frame : nil)
         let binding = Binding(get: { self.bar }, set: { next in
             let devicesChanged = next.cameraID != self.bar.cameraID || next.microphoneID != self.bar.microphoneID
+                || next.systemAudio != self.bar.systemAudio
             self.bar = next
             if devicesChanged { self.onDevices(next) }
             self.showBar()

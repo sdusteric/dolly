@@ -40,25 +40,35 @@ public enum PlayerItemFactory {
         guard let track = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else {
             throw CocoaError(.featureUnsupported)
         }
-        // Sound comes from the microphone file when there is one, else from the recording.
+        // Voice from the microphone file, and the sound other apps played from system.m4a, each on
+        // its own track; the player and the exporter mix them. A take with neither uses the
+        // recording's own sound, if it has any.
+        var sounds: [Side] = []
         let microphone = folder.appending(path: TakeStore.audioName)
-        var sound: Side?
-        if let offset = take.microphoneOffset, FileManager.default.fileExists(atPath: microphone.path(percentEncoded: false)) {
-            sound = await Side.load(microphone, type: .audio, offset: offset)
-        } else if let audio = try await source.loadTracks(withMediaType: .audio).first {
-            sound = Side(asset: source, track: audio, offset: 0, length: sourceDuration, type: .audio)
+        if let offset = take.microphoneOffset, let side = await Side.load(microphone, type: .audio, offset: offset) { sounds.append(side) }
+        if let offset = take.systemAudioOffset,
+           let side = await Side.load(folder.appending(path: TakeStore.systemAudioName), type: .audio, offset: offset) {
+            sounds.append(side)
+        }
+        if sounds.isEmpty, let audio = try await source.loadTracks(withMediaType: .audio).first {
+            sounds.append(Side(asset: source, track: audio, offset: 0, length: sourceDuration, type: .audio))
         }
         var webcam: Side?
         if let camera = take.camera {
             webcam = await Side.load(folder.appending(path: camera.file), type: .video, offset: camera.startOffset)
         }
-        var soundTrack: AVMutableCompositionTrack?, webcamTrack: AVMutableCompositionTrack?
+        var soundTracks = [AVMutableCompositionTrack?](repeating: nil, count: sounds.count)
+        var webcamTrack: AVMutableCompositionTrack?
         var cursor = CMTime.zero
         for piece in map.pieces {
             let range = CMTimeRange(start: time(piece.start), end: time(piece.end))
             try track.insertTimeRange(range, of: video, at: cursor)
             // Sped-up stretches are silent: fast speech is noise.
-            if piece.rate == 1, let sound { sound.insert(piece, at: cursor, length: range.duration, into: composition, track: &soundTrack) }
+            if piece.rate == 1 {
+                for i in sounds.indices {
+                    sounds[i].insert(piece, at: cursor, length: range.duration, into: composition, track: &soundTracks[i])
+                }
+            }
             if let webcam { webcam.insert(piece, at: cursor, length: range.duration, into: composition, track: &webcamTrack) }
             var length = range.duration
             if piece.rate != 1 {

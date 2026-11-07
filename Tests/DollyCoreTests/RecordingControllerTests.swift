@@ -193,6 +193,18 @@ final class GatedNamer: ZoomNaming, @unchecked Sendable {
         #expect(updates == [ZoomNameUpdate(id: zoom.id, from: zoom.name, to: "Run check up")])
     }
 
+    /// System audio is a file beside the movie; the take keeps where it starts.
+    @Test func systemAudioOffsetIsKept() async throws {
+        defer { try? FileManager.default.removeItem(at: home) }
+        var p = plan
+        p.systemAudio = true
+        let c = controller(source: FakeRecordingSource(options: .init(seconds: 1, startHost: 50, systemAudio: true)), pointer: FakePointerSampler())
+        await c.start(plan: p)
+        let take = try #require(await c.requestStop(hostTime: 51))
+        #expect(take.systemAudioOffset.map { abs($0 - 0.02) < 0.001 } == true)
+        #expect(FileManager.default.fileExists(atPath: store.folder(for: take.id).appending(path: TakeStore.systemAudioName).path))
+    }
+
     /// Quit while a Stop is still saving waits for that save and gets the same take, so the app
     /// never terminates before take.json is written.
     @Test func secondStopWaitsForTheFirst() async throws {

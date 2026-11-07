@@ -67,6 +67,7 @@ public struct RecordBar: View {
                          toggle: devices.toggleCamera) { model.cameraID = $0 }
             deviceSwitch("Microphone", symbol: "mic", on: model.microphone, options: devices.microphones, selected: model.microphoneID,
                          toggle: devices.toggleMicrophone) { model.microphoneID = $0 }
+            soundSwitch
 
             Button(action: record) {
                 HStack(spacing: 6) { RecordDot(); Text("Record"); ShortcutHint(text: shortcut) }
@@ -87,6 +88,28 @@ public struct RecordBar: View {
         // the bar casts it, not every button inside.
         .compositingGroup()
         .shadow(color: .black.opacity(0.18), radius: 16, y: 6)
+    }
+
+    /// System audio: the sound other apps play. A plain switch, with no device to choose.
+    private var soundSwitch: some View {
+        let on = model.systemAudio
+        return Button { model.systemAudio.toggle() } label: {
+            HStack(spacing: 5) {
+                Image(systemName: on ? "speaker.wave.2.fill" : "speaker.slash").frame(width: 16)
+                Text("System audio")
+            }
+            .font(Theme.Font.bodyMedium)
+            .foregroundStyle(on ? Theme.ink.color : Theme.muted.color)
+            .padding(.horizontal, 10)
+            .frame(height: 26)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("System audio")
+        .accessibilityValue(on ? "On" : "Off")
+        .padding(2)
+        .background(RoundedRectangle(cornerRadius: 7).fill(on ? Theme.sheet.color : Theme.active.color))
+        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(on ? Theme.control.color : .clear, lineWidth: 1))
     }
 
     /// A switch that reads as one: the device's name in ink with a filled symbol when on, muted with

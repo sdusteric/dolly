@@ -65,6 +65,7 @@ While the bar is open the editor window leaves the screen, so the owner can see 
 
 - `SCStreamConfiguration`: `showsCursor = false` (Dolly draws its own pointer, 4.7), 60 fps (`minimumFrameInterval` 1/60) **(my call: demos have fast pointer moves; 30 fps judders when zoomed)**, native pixel size (Retina 2x), `queueDepth` 6, sRGB, BT.709 tagging on the file.
 - Writer: `AVAssetWriter`, HEVC at high quality for the master file (`take.mov`), so edits never re-encode a lossy H.264 twice. Audio as AAC 48 kHz in the same file when on.
+- **System audio (2026-11-07, my calls):** a "System audio" switch in the Record bar, off by default and remembered. ScreenCaptureKit records the sound other apps play (`capturesAudio`, `excludesCurrentProcessAudio`, 48 kHz stereo; a window take hears that window's app) into `system.m4a` beside the movie, AAC 160 kbit/s, with its first sample's offset in take.json. It needs no permission beyond Screen Recording. A failure drops the sound, never the take. The editor and export mix it with the microphone at full level on separate tracks; sped-up stretches are silent (6.3.1).
 - Every video sample's presentation time is kept; the pointer log (4.3) uses the same host clock (`CMClockGetHostTimeClock`), so pointer and frames line up exactly.
 - Disk: refuse to start under 2 GB free; stop cleanly under 500 MB (Snap's rule).
 - Max length 30 minutes **(my call)**; a warning at 5 minutes in the menu bar timer tooltip ("Longer than Threads allows").
@@ -326,7 +327,7 @@ A spike-tape L corner in pink over a dark stage square, in the family's icon gri
 
 1. **M1, record and auto zoom (the replacement).** Builds on the safe baselines: clicks by polling (plan B) and the arrow pointer only. S1 and S2 are a five-minute checklist the owner runs at the Mac with a debug build (an agent cannot click or grant permissions on the real Mac); plan A and pointer shapes switch on only if they pass **(my call)**. Record a window, area or display with the pointer log; zoom rules; camera; editor with stage, timeline and inspector; one shape (16:9); export H.264; Copy and Show in Finder. Shelf action and status file.
 2. **M2, every shape.** 1:1, 4:5, 9:16 with "In tall shapes"; the plates export sheet; several shapes in one export.
-3. **M3, polish.** Picture backgrounds, Hide when still, system audio and microphone, the app icon, motion gate pass on screenshots, release.
+3. **M3, polish.** Picture backgrounds, Hide when still, system audio (built 2026-11-07) and microphone, the app icon, motion gate pass on screenshots, release.
 
 Scope of the first plan **(my call)**: M1 inside the `dolly` repo. The cross-repo pieces (CONTRACT.md, Shelf's sixth tile, the appcast, the private GitHub repo, the first notarized release) are small separate tasks after M1, and the GitHub repo and release wait for the owner.
 

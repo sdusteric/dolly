@@ -53,7 +53,7 @@ Sources/DollyUI/
   Record/     RecordBar.swift (changed)  RecordBarModel.swift (changed)  CameraPreviewPanel.swift
   Export/     ExportSheet.swift (changed)
 Sources/Dolly/        AppWiring.swift  RecordingWiring.swift  ShotMode.swift  ShotScenarios.swift (changed)
-docs/spikes/s3-s4-checklist.md
+docs/spikes/s3-s5-checklist.md
 ```
 
 ---
@@ -386,7 +386,7 @@ docs/spikes/s3-s4-checklist.md
 
 **Files:**
 - Modify: `Sources/Dolly/AppWiring.swift`, `Sources/Dolly/RecordingWiring.swift`, `Sources/dollyctl/main.swift`, `Sources/DollyCore/Tools/DollyctlCommands.swift`, `CLAUDE.md`, `README.md`
-- Create: `docs/spikes/s3-s4-checklist.md`
+- Create: `docs/spikes/s3-s5-checklist.md`
 - Test: `Tests/DollyCoreTests/DollyctlTests.swift`
 
 **Interfaces:**
@@ -394,7 +394,7 @@ docs/spikes/s3-s4-checklist.md
   - After a take with `audio.m4a` and `Settings.captionsFromVoice` (default true when the microphone was on), the editor transcribes in the background with `Transcriber` and calls `editor.setCaptions`; the Captions tab shows "Transcribing…" until then and "Couldn't transcribe: <reason>" on failure, with Transcribe again. Transcribe again on captions the owner edited first asks "Replace your edited captions?" with Replace and Cancel (`CaptionTrack.edited` set by every Task 6 caption edit, cleared by `setCaptions`).
   - Choose… for a picture backdrop: `NSOpenPanel` for images, then `TakeStore.importBackdrop`. Desktop: `NSWorkspace.shared.desktopImageURL(for:)` of the screen the take was recorded on, imported the same way.
   - `dollyctl render <take> --shape original|16x9|1x1|4x5|9x16 --at <s> --out <png>` and `dollyctl captions <take> --srt` (prints SRT from `take.json`).
-  - `docs/spikes/s3-s4-checklist.md`: S3 (record 20 s with Microphone on, speak; see whether macOS asks for Speech Recognition; note whether a model download prompt appears; check the caption times against the voice) and S4 (Camera on, clap on camera while clicking; in the editor the clap frame and the click are within one frame at 60 fps).
+  - `docs/spikes/s3-s5-checklist.md`: S3 (record 20 s with Microphone on, speak; see whether macOS asks for Speech Recognition; note whether a model download prompt appears; check the caption times against the voice) and S4 (Camera on, clap on camera while clicking; in the editor the clap frame and the click are within one frame at 60 fps).
 
 - [ ] **Step 1: Write the failing tests**
 

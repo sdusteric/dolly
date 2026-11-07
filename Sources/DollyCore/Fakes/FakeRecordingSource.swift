@@ -11,11 +11,15 @@ public final class FakeRecordingSource: RecordingSource {
         public var startHost: Double
         /// Sent after the last frame, as ScreenCaptureKit does when the window closes.
         public var stopEvent: RecordingStopReason?
-        public init(seconds: Double, failOnStart: Bool = false, startHost: Double = 0, stopEvent: RecordingStopReason? = nil) {
+        /// Writes a tone as system.m4a, starting 0.02 s after the first frame, when the plan asks.
+        public var systemAudio: Bool
+        public init(seconds: Double, failOnStart: Bool = false, startHost: Double = 0, stopEvent: RecordingStopReason? = nil,
+                    systemAudio: Bool = false) {
             self.seconds = seconds
             self.failOnStart = failOnStart
             self.startHost = startHost
             self.stopEvent = stopEvent
+            self.systemAudio = systemAudio
         }
     }
 
@@ -37,6 +41,10 @@ public final class FakeRecordingSource: RecordingSource {
                 try await writer.append(frame, at: CMTime(value: CMTimeValue(i), timescale: CMTimeScale(plan.fps)))
             }
             try await writer.finish()
+            if options.systemAudio, plan.systemAudio {
+                try SyntheticTake.writeTone(to: movieURL.deletingLastPathComponent().appending(path: TakeStore.systemAudioName),
+                                            seconds: options.seconds)
+            }
             if let reason = options.stopEvent { events(.stopped(reason)) }
         }
         task.withLock { $0 = job }
@@ -48,6 +56,7 @@ public final class FakeRecordingSource: RecordingSource {
         guard let job = task.withLock({ $0 }) else { throw RecordingSourceError.notRecording }
         didStop.withLock { $0 = true }
         try await job.value
-        return RecordingResult(duration: options.seconds, startHost: options.startHost)
+        return RecordingResult(duration: options.seconds, startHost: options.startHost,
+                               systemAudioStart: options.systemAudio ? options.startHost + 0.02 : nil)
     }
 }
