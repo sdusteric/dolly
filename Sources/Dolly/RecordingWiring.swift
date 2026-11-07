@@ -101,9 +101,10 @@ final class RecordingWiring {
         }
     }
 
-    /// Quit: finish the take so it is not left without take.json.
+    /// Quit: finish the take so it is not left without take.json, waiting for a stop that is
+    /// already saving.
     func stopForQuit() async {
-        if case .recording = controller.state {
+        if isRecording {
             await controller.stop(hostTime: HostClock().now(), reason: .quit)
         }
         finishTimer()

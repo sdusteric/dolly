@@ -30,6 +30,7 @@ final class EditorController: NSObject, NSWindowDelegate {
     private var saveTask: Task<Void, Never>?
     private var reloadNumber = 0
     private var shelfNumber = 0
+    private weak var exportModel: ExportSheetModel?
 
     init(paths: DollyPaths, settings: DollyCore.Settings, log: Log) {
         self.paths = paths
@@ -51,6 +52,7 @@ final class EditorController: NSObject, NSWindowDelegate {
         screen.onReveal = { entry in NSWorkspace.shared.activateFileViewerSelecting([Self.revealURL(entry)]) }
         screen.onTrash = { [weak self] entry in self?.trash(entry) }
         refreshTakes()
+        Exporter.sweepScratch(in: exportsFolder)
     }
 
     var editor: EditorModel? { screen.editor }
@@ -471,6 +473,7 @@ final class EditorController: NSObject, NSWindowDelegate {
     private func presentExport(posters: [ShapePreset: CGImage]) {
         guard let editor = screen.editor, let folder, let window, window.attachedSheet == nil else { return }
         let model = ExportSheetModel(editor: editor, takeFolder: folder, folder: exportsFolder, exporter: Exporter())
+        exportModel = model
         model.fps = settings.exportFPS
         model.onExported = { [weak self, weak model] _ in
             if let fps = model?.fps, fps != self?.settings.exportFPS { self?.setExportFPS(fps) }
@@ -495,6 +498,13 @@ final class EditorController: NSObject, NSWindowDelegate {
         sheet.contentView = NSHostingView(rootView: view.focusEffectDisabled())
         sheet.setContentSize(sheet.contentView?.fittingSize ?? CGSize(width: 520, height: 520))
         window.beginSheet(sheet)
+    }
+
+    var isExporting: Bool { exportModel?.isExporting ?? false }
+
+    /// Quit: stops a running export and waits for it to clean up.
+    func stopExportForQuit() async {
+        await exportModel?.stopForQuit()
     }
 
     private func chooseFolder(for model: ExportSheetModel, over sheet: NSWindow) {

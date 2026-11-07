@@ -42,6 +42,7 @@ public final class RecordingController {
     @ObservationIgnored private var sideFailures: [Side: Double] = [:]
     @ObservationIgnored private var sideNotes: [String] = []
     @ObservationIgnored private var sideStartTask: Task<Void, Never>?
+    @ObservationIgnored private var stopping: Task<Take?, Never>?
     /// Zoom names read from the screen, for the take with this id; arrives after the take is saved.
     @ObservationIgnored public var onZoomNames: (UUID, [ZoomNameUpdate]) -> Void = { _, _ in }
 
@@ -163,10 +164,19 @@ public final class RecordingController {
     }
 
     /// Stops for `reason`; the app uses it for quit and sleep, the stream's events for the rest.
+    /// A stop that comes while another is saving waits for it and returns the same take.
     @discardableResult
     public func stop(hostTime: Double, reason: RecordingStopReason) async -> Take? {
+        if let stopping { return await stopping.value }
         guard case .recording = state, let plan, let id = takeID else { return nil }
         state = .finishing
+        let task = Task { await finish(hostTime: hostTime, reason: reason, plan: plan, id: id) }
+        stopping = task
+        defer { stopping = nil }
+        return await task.value
+    }
+
+    private func finish(hostTime: Double, reason: RecordingStopReason, plan: RecordingPlan, id: UUID) async -> Take? {
         defer {
             self.plan = nil
             takeID = nil

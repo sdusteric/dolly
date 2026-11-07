@@ -26,6 +26,7 @@ public final class ExportSheetModel {
     @ObservationIgnored let takeFolder: URL
     @ObservationIgnored let exporter: any ExportRunning
     @ObservationIgnored private var job: Task<URL, any Error>?
+    @ObservationIgnored private var running: Task<Void, Never>?
 
     public init(editor: EditorModel, takeFolder: URL, folder: URL, exporter: any ExportRunning) {
         self.editor = editor
@@ -108,6 +109,20 @@ public final class ExportSheetModel {
     }
 
     public func cancel() { job?.cancel() }
+
+    /// Starts an export the sheet keeps hold of, so Quit can stop it and wait.
+    public func start() {
+        guard !isExporting else { return }
+        running = Task { await export() }
+    }
+
+    public var isExporting: Bool { if case .exporting = state { true } else { false } }
+
+    /// Quit: cancels a running export and waits, so its scratch folder is gone before Dolly exits.
+    public func stopForQuit() async {
+        cancel()
+        await running?.value
+    }
 
     /// Esc: stops a running export and keeps the sheet; otherwise closes it.
     public func escape(close: () -> Void) {
@@ -248,7 +263,7 @@ public struct ExportSheet: View {
         .disabled(isExporting)
     }
 
-    private var isExporting: Bool { if case .exporting = model.state { true } else { false } }
+    private var isExporting: Bool { model.isExporting }
 
     @ViewBuilder private var footer: some View {
         HStack(spacing: 8) {
@@ -256,7 +271,7 @@ public struct ExportSheet: View {
             case .ready:
                 Spacer()
                 Button("Cancel", action: close).buttonStyle(DollyButtonStyle()).keyboardShortcut(.cancelAction)
-                Button("Export") { Task { await model.export() } }.buttonStyle(DollyButtonStyle(kind: .primary)).keyboardShortcut(.defaultAction)
+                Button("Export") { model.start() }.buttonStyle(DollyButtonStyle(kind: .primary)).keyboardShortcut(.defaultAction)
             case .exporting:
                 Spacer()
                 Button("Cancel") { model.cancel() }.buttonStyle(DollyButtonStyle()).keyboardShortcut(.cancelAction)
@@ -270,7 +285,7 @@ public struct ExportSheet: View {
                 Text(message).font(Theme.Font.body).foregroundStyle(Theme.record.color).fixedSize(horizontal: false, vertical: true)
                 Spacer()
                 Button("Close", action: close).buttonStyle(DollyButtonStyle())
-                Button("Try again") { Task { await model.export() } }.buttonStyle(DollyButtonStyle(kind: .primary))
+                Button("Try again") { model.start() }.buttonStyle(DollyButtonStyle(kind: .primary))
             }
         }
     }

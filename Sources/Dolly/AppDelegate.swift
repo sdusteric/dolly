@@ -93,11 +93,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
     /// Closing the editor keeps Dolly running so the record shortcut still works.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
-    /// Quitting mid-recording (Quit, logout, a Sparkle update) finishes the take first.
+    /// Quitting mid-recording or mid-save (Quit, logout, a Sparkle update) finishes the take
+    /// first; an export in progress is canceled and its scratch folder removed.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let recording, recording.isRecording else { return .terminateNow }
+        let recording = recording?.isRecording == true ? recording : nil
+        let editor = editor?.isExporting == true ? editor : nil
+        guard recording != nil || editor != nil else { return .terminateNow }
         Task {
-            await recording.stopForQuit()
+            await recording?.stopForQuit()
+            await editor?.stopExportForQuit()
             NSApp.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater

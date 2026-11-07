@@ -77,6 +77,21 @@ func topLevelAtoms(_ url: URL) throws -> [String] {
         #expect(((try? FileManager.default.contentsOfDirectory(atPath: out.path)) ?? []).isEmpty)
     }
 
+    /// A quit or crash mid-export leaves the hidden scratch folder; the next launch removes it
+    /// and nothing else.
+    @Test func sweepRemovesOnlyScratchFolders() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "dolly-sweep-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let scratch = root.appending(path: "\(Exporter.scratchPrefix)1234")
+        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        try Data([1]).write(to: scratch.appending(path: "export.mp4"))
+        try Data([1]).write(to: root.appending(path: "Demo 16x9.mp4"))
+        try FileManager.default.createDirectory(at: root.appending(path: ".other"), withIntermediateDirectories: true)
+        Exporter.sweepScratch(in: root)
+        let left = try FileManager.default.contentsOfDirectory(atPath: root.path).sorted()
+        #expect(left == [".other", "Demo 16x9.mp4"])
+    }
+
     @Test func posterIsAJPEG480Wide() async throws {
         let (_, folder, _) = try await fixture()
         defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }

@@ -193,6 +193,20 @@ final class GatedNamer: ZoomNaming, @unchecked Sendable {
         #expect(updates == [ZoomNameUpdate(id: zoom.id, from: zoom.name, to: "Run check up")])
     }
 
+    /// Quit while a Stop is still saving waits for that save and gets the same take, so the app
+    /// never terminates before take.json is written.
+    @Test func secondStopWaitsForTheFirst() async throws {
+        defer { try? FileManager.default.removeItem(at: home) }
+        let c = controller(source: FakeRecordingSource(options: .init(seconds: 2)), pointer: FakePointerSampler())
+        await c.start(plan: plan)
+        async let first = c.requestStop(hostTime: 2)
+        async let quit = c.stop(hostTime: 2.1, reason: .quit)
+        let (a, b) = await (first, quit)
+        let take = try #require(a)
+        #expect(b?.id == take.id)
+        #expect(try store.load(store.folder(for: take.id)).id == take.id)
+    }
+
     func sideController(camera: FakeSideSource?, microphone: FakeSideSource? = nil) -> RecordingController {
         let c = RecordingController(store: store, source: FakeRecordingSource(options: .init(seconds: 1, startHost: 100)),
                             pointer: FakePointerSampler(), clock: FakeClock(), disk: FakeDiskSpace(bytes: 50_000_000_000),

@@ -83,6 +83,19 @@ final class FakeExporter: ExportRunning, @unchecked Sendable {
         #expect(sheet.state == .ready)
     }
 
+    /// Quit during an export cancels it and waits, so the scratch folder is removed before exit.
+    @Test func quitCancelsARunningExportAndWaits() async {
+        let fake = FakeExporter()
+        fake.waits = true
+        let (sheet, editor) = model(fake)
+        sheet.start()
+        for _ in 0..<200 where sheet.state == .ready { try? await Task.sleep(for: .milliseconds(5)) }
+        #expect(sheet.isExporting)
+        await sheet.stopForQuit()
+        #expect(sheet.state == .ready && !sheet.isExporting)
+        #expect(editor.take.exports.isEmpty)
+    }
+
     @Test func failureSaysWhy() async {
         let fake = FakeExporter()
         fake.fails = true

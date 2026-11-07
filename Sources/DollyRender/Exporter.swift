@@ -6,7 +6,17 @@ import Foundation
 /// `AVAssetReaderVideoCompositionOutput` into H.264 High at the plan's bit rate, moov first, to a
 /// hidden temp name and then a free final name, so nothing is ever overwritten. Cancellable.
 public final class Exporter: ExportRunning {
+    public static let scratchPrefix = ".dolly-export-"
+
     public init() {}
+
+    /// Removes scratch folders an export left behind when Dolly quit or crashed mid-export.
+    public static func sweepScratch(in folder: URL) {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path(percentEncoded: false))) ?? []
+        for name in names where name.hasPrefix(scratchPrefix) {
+            try? FileManager.default.removeItem(at: folder.appending(path: name, directoryHint: .isDirectory))
+        }
+    }
 
     public func export(
         _ plan: ExportPlan, takeFolder: URL, pointer: PointerPath?, progress: @escaping @Sendable (Double) -> Void
@@ -35,7 +45,7 @@ public final class Exporter: ExportRunning {
 
         // AVFoundation leaves its own scratch files beside the output while it moves the moov box
         // first, so the export happens in a hidden folder of its own that is removed afterwards.
-        let scratch = plan.folder.appending(path: ".dolly-export-\(UUID().uuidString)", directoryHint: .isDirectory)
+        let scratch = plan.folder.appending(path: "\(Self.scratchPrefix)\(UUID().uuidString)", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: scratch) }
         let temp = scratch.appending(path: "export.mp4")
