@@ -14,9 +14,9 @@
 #   SIGN_ID          signing identity SHA-1 or name (default: the Developer ID Application cert of
 #                    team 8N9KUZLT8N when the keychain has one, else the Apple Development cert)
 #   DOLLY_BUNDLE_OUT  output bundle path, must end in bundle/Dolly.app (default <repo>/build/bundle/Dolly.app)
-#   INSTALL_DIR      install target for --install (default: $HOME/Applications)
+#   INSTALL_DIR      install target for --install (default: /Applications)
 #
-# --install copies the bundle to ~/Applications with ditto. Agents and acceptance never use it.
+# --install copies the bundle to /Applications with ditto. Agents and acceptance never use it.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -133,7 +133,7 @@ sign --entitlements "$REPO/resources/Dolly.entitlements" "$OUT"
 codesign --verify --deep --strict --verbose=2 "$OUT"
 
 if [ "$INSTALL" = 1 ]; then
-  DEST_DIR="${INSTALL_DIR:-$HOME/Applications}"
+  DEST_DIR="${INSTALL_DIR:-/Applications}"
   DEST="$DEST_DIR/Dolly.app"
   mkdir -p "$DEST_DIR"
   case "$DEST" in */Dolly.app) ;; *) echo "refusing odd install path $DEST" >&2; exit 1 ;; esac
