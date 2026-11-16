@@ -13,3 +13,9 @@ Dolly records a demo of your screen and turns your clicks into smooth zooms, the
 Dolly needs Screen Recording, and Camera and Microphone only when you turn those switches on. It never asks for Accessibility or Input Monitoring, and nothing leaves your Mac unless you drag it out.
 
 Build: `scripts/bundle.sh --release`. Gates: `scripts/check.sh`. Design: `docs/superpowers/specs/2026-10-26-dolly-design.md` and the studio pass `docs/superpowers/specs/2026-10-29-dolly-studio.md`.
+
+It needs macOS 27 on Apple Silicon. `scripts/bundle.sh` signs with your own certificate when you set `SIGN_ID` (a name or SHA-1 from `security find-identity -v -p codesigning`). `scripts/check.sh` expects the public [sdusteric/app-updates](https://github.com/sdusteric/app-updates) repo cloned next to this one.
+
+## License
+
+MIT. See `LICENSE`.
