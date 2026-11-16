@@ -104,7 +104,7 @@ enum ShotScenarios {
             Zoom(start: Double(i * 9), end: Double(i * 9 + 3), aim: .zero, depth: 1.6, mode: .hold, moveIn: 0.6,
                  moveOut: 0.5, source: .auto, clickIDs: [i], name: "")
         }
-        var snapTake = Take(name: "Snap all-in-one toolbar", target: .window, size: CGSize(width: 900, height: 120), pixelScale: 2, fps: 60, duration: 36.0)
+        var snapTake = Take(name: "Still all-in-one toolbar", target: .window, size: CGSize(width: 900, height: 120), pixelScale: 2, fps: 60, duration: 36.0)
         snapTake.exports = [ExportRecord(shape: .wide16x9, url: folder, date: Date())]
         var tidy = Take(name: "Tidy check up", target: .window, size: CGSize(width: 980, height: 700), pixelScale: 2, fps: 60, duration: 52.4)
         tidy.exports = [ExportRecord(shape: .wide16x9, url: folder, date: Date())]

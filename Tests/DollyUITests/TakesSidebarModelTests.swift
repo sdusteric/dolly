@@ -11,7 +11,7 @@ import Testing
             Zoom(start: Double(i * 8), end: Double(i * 8 + 3), aim: .zero, depth: 1.6, mode: .hold, moveIn: 0.6, moveOut: 0.5,
                  source: .auto, clickIDs: [i], name: "z\(i)")
         }
-        var snapTake = Take(name: "Snap all-in-one toolbar", target: .window, size: CGSize(width: 800, height: 500), pixelScale: 2, fps: 60, duration: 36.0)
+        var snapTake = Take(name: "Still all-in-one toolbar", target: .window, size: CGSize(width: 800, height: 500), pixelScale: 2, fps: 60, duration: 36.0)
         snapTake.exports = [ExportRecord(shape: .wide16x9, url: URL(filePath: "/tmp/a.mp4"), date: Date())]
         let take1 = Take(name: "Shelf Tile Board, take 1", target: .window, size: CGSize(width: 848, height: 858), pixelScale: 2, fps: 60, duration: 72.6)
         let folder = URL(filePath: "/tmp/takes/x", directoryHint: .isDirectory)

@@ -22,7 +22,7 @@ public enum SyntheticTake {
             (0.4, 3.8, "This is Shelf, my launcher for every app."), (4.2, 7.2, "Haul shows what is downloading."),
             (7.6, 11.0, "Run check up tells Tidy to scan again."), (11.4, 14.6, "Each tile has its own quick actions."),
             (15.0, 20.8, "Updates install right from the board."), (21.2, 26.6, "Reel picks up where I left off."),
-            (27.0, 31.8, "Snap keeps my last three captures."), (32.2, 37.6, "Booth knows which episode is next."),
+            (27.0, 31.8, "My last three captures wait in Still."), (32.2, 37.6, "Booth knows which episode is next."),
             (38.0, 44.2, "Press a number to jump to any app."), (44.6, 47.8, "That is the whole board."),
         ]
         return CaptionTrack(source: .voice, locale: "en_US", items: lines.enumerated().map { i, l in
