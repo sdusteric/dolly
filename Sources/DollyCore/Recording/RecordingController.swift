@@ -34,6 +34,9 @@ public final class RecordingController {
     @ObservationIgnored private let namer: any ZoomNaming
     @ObservationIgnored private var plan: RecordingPlan?
     @ObservationIgnored private var takeID: UUID?
+    /// The take whose stream is being started, and the reason if that stream stopped before it was recording.
+    @ObservationIgnored private var starting: UUID?
+    @ObservationIgnored private var stoppedWhileStarting: RecordingStopReason?
     @ObservationIgnored private var startHost: Double?
     @ObservationIgnored private var cancelled = false
     @ObservationIgnored private let sides: [Side: any SideSource]
@@ -90,15 +93,15 @@ public final class RecordingController {
             try pointer.start(pointerURL: folder.appending(path: TakeStore.pointerName),
                               windowLogURL: plan.target == .window ? folder.appending(path: TakeStore.windowName) : nil,
                               windowID: plan.windowID)
+            starting = id
+            stoppedWhileStarting = nil
             // The stream can stop on its own (window closed, display gone, an error): save the take then.
             try await source.start(plan: plan, movieURL: folder.appending(path: TakeStore.movieName)) { [weak self] event in
                 guard case .stopped(let reason) = event else { return }
-                Task { @MainActor in
-                    guard let self else { return }
-                    await self.stop(hostTime: self.clock.now(), reason: reason)
-                }
+                Task { @MainActor in await self?.streamStopped(take: id, reason: reason) }
             }
         } catch {
+            starting = nil
             try? pointer.stop()
             // An empty folder would list as a broken take.
             try? FileManager.default.removeItem(at: folder)
@@ -108,11 +111,28 @@ public final class RecordingController {
         self.plan = plan
         takeID = id
         state = .recording(since: clock.now())
+        starting = nil
+        if let reason = stoppedWhileStarting {
+            // Nothing more will come in: end it now and leave the camera and microphone closed.
+            stoppedWhileStarting = nil
+            await stop(hostTime: clock.now(), reason: reason)
+            return
+        }
         // The screen is recording; the camera and microphone open together beside it. One that
         // cannot start is stopped, noted and left out.
         let task = Task { await startSides(plan, folder: folder) }
         sideStartTask = task
         await task.value
+    }
+
+    /// The stream of `take` stopped on its own. One that is still starting ends as soon as it would
+    /// have recorded; one from an earlier take says nothing about this one.
+    private func streamStopped(take: UUID, reason: RecordingStopReason) async {
+        if starting == take {
+            stoppedWhileStarting = stoppedWhileStarting ?? reason
+        } else if takeID == take {
+            await stop(hostTime: clock.now(), reason: reason)
+        }
     }
 
     private func startSides(_ plan: RecordingPlan, folder: URL) async {

@@ -13,26 +13,36 @@ public final class FakeRecordingSource: RecordingSource {
         public var stopEvent: RecordingStopReason?
         /// Writes a tone as system.m4a, starting 0.02 s after the first frame, when the plan asks.
         public var systemAudio: Bool
+        /// Sends `stopEvent` before `start` returns, like a window that closes as capture begins.
+        public var stopsWhileStarting: Bool
         public init(seconds: Double, failOnStart: Bool = false, startHost: Double = 0, stopEvent: RecordingStopReason? = nil,
-                    systemAudio: Bool = false) {
+                    systemAudio: Bool = false, stopsWhileStarting: Bool = false) {
             self.seconds = seconds
             self.failOnStart = failOnStart
             self.startHost = startHost
             self.stopEvent = stopEvent
             self.systemAudio = systemAudio
+            self.stopsWhileStarting = stopsWhileStarting
         }
     }
 
     public let options: Options
     private let task = Mutex<Task<Void, any Error>?>(nil)
     private let didStop = Mutex(false)
+    private let listeners = Mutex<[@Sendable (RecordingEvent) -> Void]>([])
     public var stopped: Bool { didStop.withLock { $0 } }
 
     public init(options: Options) { self.options = options }
 
+    /// Sends `event` to the listener of the `index`th start, like a stream reporting late.
+    public func send(_ event: RecordingEvent, toStart index: Int) {
+        listeners.withLock { $0[index] }(event)
+    }
+
     public func start(plan: RecordingPlan, movieURL: URL, events: @escaping @Sendable (RecordingEvent) -> Void) async throws {
         if options.failOnStart { throw RecordingSourceError.couldNotStart("fake failure") }
         let options = options
+        listeners.withLock { $0.append(events) }
         let job = Task {
             let writer = try MasterWriter(url: movieURL, pixelSize: plan.pixelSize, fps: plan.fps)
             events(.started(hostTime: options.startHost))
@@ -45,9 +55,10 @@ public final class FakeRecordingSource: RecordingSource {
                 try SyntheticTake.writeTone(to: movieURL.deletingLastPathComponent().appending(path: TakeStore.systemAudioName),
                                             seconds: options.seconds)
             }
-            if let reason = options.stopEvent { events(.stopped(reason)) }
+            if let reason = options.stopEvent, !options.stopsWhileStarting { events(.stopped(reason)) }
         }
         task.withLock { $0 = job }
+        if let reason = options.stopEvent, options.stopsWhileStarting { events(.stopped(reason)) }
         // The real source reports .started after its first frame; wait for the writer to begin.
         try await Task.sleep(for: .milliseconds(1))
     }

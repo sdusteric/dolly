@@ -136,6 +136,33 @@ final class GatedNamer: ZoomNaming, @unchecked Sendable {
         #expect(c.lastTake?.notes == ["Stopped: the window closed"])
     }
 
+    /// A stream that stops before `start` returns must not be left "recording" with nothing coming in.
+    @Test func streamStopWhileStartingEndsTheRecording() async throws {
+        defer { try? FileManager.default.removeItem(at: home) }
+        let source = FakeRecordingSource(options: .init(seconds: 1, stopEvent: .windowClosed, stopsWhileStarting: true))
+        let c = controller(source: source, pointer: FakePointerSampler())
+        await c.start(plan: plan)
+        for _ in 0..<200 where c.state != .idle { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(c.state == .idle)
+        #expect(source.stopped)
+        #expect(c.lastTake?.notes == ["Stopped: the window closed"])
+    }
+
+    /// A late stop from the take before says nothing about the one recording now.
+    @Test func stopEventFromAnEarlierTakeIsIgnored() async throws {
+        defer { try? FileManager.default.removeItem(at: home) }
+        let source = FakeRecordingSource(options: .init(seconds: 1))
+        let c = controller(source: source, pointer: FakePointerSampler())
+        await c.start(plan: plan)
+        let first = try #require(await c.requestStop(hostTime: 1))
+        await c.start(plan: plan)
+        source.send(.stopped(.windowClosed), toStart: 0)
+        try await Task.sleep(for: .milliseconds(100))
+        guard case .recording = c.state else { Issue.record("not recording: \(c.state)"); return }
+        let second = try #require(await c.requestStop(hostTime: 1))
+        #expect(second.id != first.id && second.notes.isEmpty)
+    }
+
     /// Review finding 4: a pointer log that fails to close still stops the screen and keeps the take.
     @Test func pointerStopFailureStillStopsSourceAndSavesTake() async throws {
         defer { try? FileManager.default.removeItem(at: home) }

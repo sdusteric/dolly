@@ -321,6 +321,7 @@ final class RecordingWiring {
         plan.nameHint = TakeName.suggestion(target: target, rect: rect, windowID: windowID, windows: windows)
         showCountdown(over: rect)
         Task {
+            let before = controller.lastTake?.id
             await controller.start(plan: plan)
             countdownPanel?.orderOut(nil)
             countdownPanel = nil
@@ -329,6 +330,8 @@ final class RecordingWiring {
                 showStatusTimer()
             } else {
                 onChoiceEnded(false)
+                // The stream stopped while it started: open the take it saved.
+                if case .idle = controller.state, let take = controller.lastTake, take.id != before { onTake(take) }
             }
             if case .failed(let message) = controller.state {
                 if message == RecordingController.couldNotStartMessage, !PermissionProbe.preflight() {
