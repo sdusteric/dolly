@@ -14,6 +14,7 @@ usage:
   dollyctl zooms <pointer.csv|pointer.bin> --size WxH --target window|area|display
   dollyctl camera <take-folder> --at <seconds>
   dollyctl render <take-folder> --frames 0,8.6 --out <dir> [--shape original|16x9|1x1|4x5|9x16]
+  dollyctl export <take-folder> --out <dir> [--shape original|16x9|1x1|4x5|9x16] [--fps 30|60]
   dollyctl captions <take-folder> --srt
   dollyctl pointer <take-folder>
   dollyctl recover <take-folder>     rebuild take.json for a window take whose stop never saved it
@@ -110,6 +111,22 @@ case "render":
         let url = outURL.appending(path: "frame-\(shape.fileSuffix)-\(String(format: "%.1f", t)).png")
         guard writePNG(image, to: url) else { fail("can't write \(url.path(percentEncoded: false))") }
         print("wrote \(url.path(percentEncoded: false)) (\(image.width)x\(image.height))")
+    }
+
+case "export":
+    // The same export as the app's Export button, for a take made or edited outside it.
+    guard let path = rest.first, let out = option("--out", in: rest) else { fail(usage) }
+    let (take, folder) = loadTake(path)
+    let outURL = URL(filePath: out, directoryHint: .isDirectory)
+    do {
+        try FileManager.default.createDirectory(at: outURL, withIntermediateDirectories: true)
+        let shape = try option("--shape", in: rest).map(DollyctlCommands.parseShape) ?? take.currentShape
+        let fps = option("--fps", in: rest).flatMap(Int.init) ?? take.fps
+        let plan = ExportPlan(take: take, shape: shape, fps: fps, folder: outURL)
+        let url = try await Exporter().export(plan, takeFolder: folder, pointer: TakeInputs.pointerPath(take: take, folder: folder)) { _ in }
+        print("wrote \(url.path(percentEncoded: false))")
+    } catch {
+        fail("export failed: \(error.localizedDescription)")
     }
 
 case "captions":
